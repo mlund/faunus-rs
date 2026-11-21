@@ -1,6 +1,7 @@
 use super::*;
 use crate::context::WithHamiltonian as _;
 use crate::energy::ld_case::{ld_system, LdCase};
+use cubecl::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 
 /// Seeded generator so the statistical assertions below cannot flake.
@@ -578,9 +579,8 @@ fn mb_velocities_w_components_are_zero() {
 // ============================================================================
 
 /// Create a wgpu client for kernel tests.
-fn test_client() -> ComputeClient<cubecl::wgpu::WgpuRuntime> {
-    let device = cubecl::wgpu::WgpuDevice::DefaultDevice;
-    cubecl::wgpu::WgpuRuntime::client(&device)
+fn test_client() -> Client {
+    pipeline::wgpu_client().unwrap()
 }
 
 /// Reconstruct with identity quaternion should reproduce COM + ref_positions exactly.
@@ -613,23 +613,22 @@ fn reconstruct_identity_quaternion() {
     let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
     unsafe {
-        kernels::reconstruct_positions::launch_unchecked::<cubecl::wgpu::WgpuRuntime>(
+        kernels::reconstruct_positions::launch_unchecked(
             &client,
             count,
             dim,
-            ArrayArg::from_raw_parts::<f32>(&h_com, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_quat, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_ref, 12, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_pos, 12, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_offsets, 2, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_rigid, 1, 1),
-            ScalarArg::new(n_atoms),
-            ScalarArg::new(n_molecules),
+            BufferArg::from_raw_parts(h_com.clone(), 4),
+            BufferArg::from_raw_parts(h_quat.clone(), 4),
+            BufferArg::from_raw_parts(h_ref.clone(), 12),
+            BufferArg::from_raw_parts(h_pos.clone(), 12),
+            BufferArg::from_raw_parts(h_offsets.clone(), 2),
+            BufferArg::from_raw_parts(h_rigid.clone(), 1),
+            n_atoms,
+            n_molecules,
         )
-    }
-    .unwrap();
+    };
 
-    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_pos)).to_vec();
+    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_pos).unwrap()).to_vec();
 
     // Atom 0: COM + ref = (1.5, 2.0, 3.0)
     assert!((result[0] - 1.5).abs() < 1e-5, "atom 0 x: {}", result[0]);
@@ -666,23 +665,22 @@ fn reconstruct_90deg_z_rotation() {
     let h_rigid = client.create_from_slice(bytemuck::cast_slice(&mol_rigid));
 
     unsafe {
-        kernels::reconstruct_positions::launch_unchecked::<cubecl::wgpu::WgpuRuntime>(
+        kernels::reconstruct_positions::launch_unchecked(
             &client,
             CubeCount::Static(1, 1, 1),
             CubeDim::new_1d(WORKGROUP_SIZE),
-            ArrayArg::from_raw_parts::<f32>(&h_com, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_quat, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_ref, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_pos, 4, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_offsets, 2, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_rigid, 1, 1),
-            ScalarArg::new(1u32),
-            ScalarArg::new(1u32),
+            BufferArg::from_raw_parts(h_com.clone(), 4),
+            BufferArg::from_raw_parts(h_quat.clone(), 4),
+            BufferArg::from_raw_parts(h_ref.clone(), 4),
+            BufferArg::from_raw_parts(h_pos.clone(), 4),
+            BufferArg::from_raw_parts(h_offsets.clone(), 2),
+            BufferArg::from_raw_parts(h_rigid.clone(), 1),
+            1u32,
+            1u32,
         )
-    }
-    .unwrap();
+    };
 
-    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_pos)).to_vec();
+    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_pos).unwrap()).to_vec();
     assert!(
         (result[0]).abs() < 1e-5,
         "x should be ~0, got {}",
@@ -731,26 +729,25 @@ fn reduce_forces_dimer() {
     let inv_box = 1.0f32 / box_length;
 
     unsafe {
-        kernels::reduce_forces_kernel::launch_unchecked::<cubecl::wgpu::WgpuRuntime>(
+        kernels::reduce_forces_kernel::launch_unchecked(
             &client,
             CubeCount::Static(1, 1, 1),
             CubeDim::new_1d(WORKGROUP_SIZE),
-            ArrayArg::from_raw_parts::<f32>(&h_forces, 8, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_pos, 8, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_com, 4, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_offsets, 2, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_com_forces, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_torques, 4, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_rigid, 1, 1),
-            ScalarArg::new(1u32),
-            ScalarArg::new(box_length),
-            ScalarArg::new(inv_box),
+            BufferArg::from_raw_parts(h_forces.clone(), 8),
+            BufferArg::from_raw_parts(h_pos.clone(), 8),
+            BufferArg::from_raw_parts(h_com.clone(), 4),
+            BufferArg::from_raw_parts(h_offsets.clone(), 2),
+            BufferArg::from_raw_parts(h_com_forces.clone(), 4),
+            BufferArg::from_raw_parts(h_torques.clone(), 4),
+            BufferArg::from_raw_parts(h_rigid.clone(), 1),
+            1u32,
+            box_length,
+            inv_box,
         )
-    }
-    .unwrap();
+    };
 
-    let cf: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_com_forces)).to_vec();
-    let tau: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_torques)).to_vec();
+    let cf: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_com_forces).unwrap()).to_vec();
+    let tau: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_torques).unwrap()).to_vec();
 
     // COM force: (0,1,0) + (0,-1,0) = (0,0,0)
     assert!(cf[0].abs() < 1e-5, "Fx={}", cf[0]);
@@ -789,25 +786,24 @@ fn half_kick_exact_impulse() {
     let h_rigid = client.create_from_slice(bytemuck::cast_slice(&mol_rigid));
 
     unsafe {
-        kernels::half_kick::launch_unchecked::<cubecl::wgpu::WgpuRuntime>(
+        kernels::half_kick::launch_unchecked(
             &client,
             CubeCount::Static(1, 1, 1),
             CubeDim::new_1d(WORKGROUP_SIZE),
-            ArrayArg::from_raw_parts::<f32>(&h_vel, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_omega, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_force, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_torque, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_quat, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_mass, 1, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_inertia, 4, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_rigid, 1, 1),
-            ScalarArg::new(1u32),
-            ScalarArg::new(dt),
+            BufferArg::from_raw_parts(h_vel.clone(), 4),
+            BufferArg::from_raw_parts(h_omega.clone(), 4),
+            BufferArg::from_raw_parts(h_force.clone(), 4),
+            BufferArg::from_raw_parts(h_torque.clone(), 4),
+            BufferArg::from_raw_parts(h_quat.clone(), 4),
+            BufferArg::from_raw_parts(h_mass.clone(), 1),
+            BufferArg::from_raw_parts(h_inertia.clone(), 4),
+            BufferArg::from_raw_parts(h_rigid.clone(), 1),
+            1u32,
+            dt,
         )
-    }
-    .unwrap();
+    };
 
-    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_vel)).to_vec();
+    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_vel).unwrap()).to_vec();
 
     // Expected: Δv = (dt/2) / m * 100 * F
     let conv = 100.0f32;
@@ -905,21 +901,20 @@ fn half_kick_atoms_exact_impulse() {
     let h_flex = client.create_from_slice(bytemuck::cast_slice(&is_flex));
 
     unsafe {
-        kernels::half_kick_atoms::launch_unchecked::<cubecl::wgpu::WgpuRuntime>(
+        kernels::half_kick_atoms::launch_unchecked(
             &client,
             CubeCount::Static(1, 1, 1),
             CubeDim::new_1d(WORKGROUP_SIZE),
-            ArrayArg::from_raw_parts::<f32>(&h_vel, 3, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_force, 4, 1),
-            ArrayArg::from_raw_parts::<f32>(&h_mass, 1, 1),
-            ArrayArg::from_raw_parts::<u32>(&h_flex, 1, 1),
-            ScalarArg::new(1u32),
-            ScalarArg::new(dt),
+            BufferArg::from_raw_parts(h_vel.clone(), 3),
+            BufferArg::from_raw_parts(h_force.clone(), 4),
+            BufferArg::from_raw_parts(h_mass.clone(), 1),
+            BufferArg::from_raw_parts(h_flex.clone(), 1),
+            1u32,
+            dt,
         )
-    }
-    .unwrap();
+    };
 
-    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_vel)).to_vec();
+    let result: Vec<f32> = bytemuck::cast_slice(&client.read_one(h_vel).unwrap()).to_vec();
 
     let conv = 100.0f32;
     let kick = 0.5 * dt / mass * conv;
@@ -949,7 +944,7 @@ fn half_kick_atoms_exact_impulse() {
 
 /// Shared fixture for physics regression tests.
 struct PhysicsTestSetup {
-    gpu: LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+    gpu: LangevinGpu,
     n: usize,
     mass: f32,
     kt: f32,
@@ -1037,10 +1032,10 @@ fn free_particle_diffusion() {
     } = PhysicsTestSetup::with_seed(0x0000_0001);
     let total_steps = 2000;
 
-    let initial_pos = gpu.download_positions();
+    let initial_pos = gpu.download_positions().unwrap();
     gpu.run_steps_with_cpu_forces(total_steps, &mut zero_forces(n))
         .unwrap();
-    let pos = gpu.download_positions();
+    let pos = gpu.download_positions().unwrap();
 
     let msd: f32 = initial_pos
         .iter()
@@ -1079,7 +1074,7 @@ fn harmonic_oscillator_position_variance() {
     let mut sum_x2 = 0.0f64;
     for _ in 0..n_blocks {
         gpu.run_steps_with_cpu_forces(500, &mut force_fn).unwrap();
-        for p in &gpu.download_positions() {
+        for p in &gpu.download_positions().unwrap() {
             sum_x2 += (p[0] as f64).powi(2);
         }
     }
@@ -1102,7 +1097,7 @@ fn temperature_equilibrium() {
 
     gpu.run_steps_with_cpu_forces(2000, &mut force_fn).unwrap();
 
-    let (t_trans, _) = gpu.download_temperature();
+    let (t_trans, _) = gpu.download_temperature().unwrap();
     let ratio = t_trans as f64 / 300.0;
     assert!(
         (0.7..=1.3).contains(&ratio),
@@ -1127,7 +1122,7 @@ fn velocity_autocorrelation_decay() {
     gpu.run_steps_with_cpu_forces(1000, &mut zero_forces(n))
         .unwrap();
 
-    let v0 = gpu.download_com_velocities();
+    let v0 = gpu.download_com_velocities().unwrap();
     let cv0: f64 = v0
         .iter()
         .map(|v| (v[0] as f64).powi(2) + (v[1] as f64).powi(2) + (v[2] as f64).powi(2))
@@ -1137,7 +1132,7 @@ fn velocity_autocorrelation_decay() {
     // Run one block and check decay at t=0.1ps (γ=10 → exp(-1) ≈ 0.368)
     gpu.run_steps_with_cpu_forces(steps_per_block, &mut zero_forces(n))
         .unwrap();
-    let vt = gpu.download_com_velocities();
+    let vt = gpu.download_com_velocities().unwrap();
     let cv: f64 = v0
         .iter()
         .zip(vt.iter())
@@ -1211,7 +1206,7 @@ fn thermostat_positions(rng_seed: u32) -> Vec<[f32; 4]> {
     gpu.upload_state(data);
     gpu.run_steps_with_cpu_forces(50, &mut zero_forces(n))
         .unwrap();
-    gpu.download_positions()
+    gpu.download_positions().unwrap()
 }
 
 /// The thermostat noise must follow the seed, not a hardcoded constant.
@@ -1295,9 +1290,15 @@ fn upload_and_reconstruct_preserves_a_rotated_rigid_molecule() {
 
     let mut gpu = LangevinRunner::init_gpu(&context, &config, &mut rng).unwrap();
     LangevinRunner::upload_full_state(&context, &mut gpu, &mut rng).unwrap();
-    gpu.dispatch_reconstruct().unwrap();
+    gpu.dispatch_reconstruct();
 
-    for (i, (got, want)) in gpu.download_positions().iter().zip(&expected).enumerate() {
+    for (i, (got, want)) in gpu
+        .download_positions()
+        .unwrap()
+        .iter()
+        .zip(&expected)
+        .enumerate()
+    {
         let got = Point::new(got[0] as f64, got[1] as f64, got[2] as f64);
         assert!(
             (got - want).norm() < 1e-4,
@@ -1375,7 +1376,7 @@ fn assert_device_forces_match_cpu(mut context: crate::backend::Backend) {
     LangevinRunner::upload_full_state(&context, &mut gpu, &mut rng).unwrap();
     assert!(gpu.has_gpu_forces, "case must run the on-device force path");
     LangevinRunner::integrate(&mut context, &mut gpu, 0).unwrap();
-    let device = gpu.download_forces();
+    let device = gpu.download_forces().unwrap();
 
     let cpu_atoms = context.hamiltonian().forces(&context);
     let (cpu_com, cpu_torque) = reduce_forces_to_com(&context, &cpu_atoms);
@@ -1658,7 +1659,7 @@ fn run_blocks(
     for _ in 0..blocks {
         runner.propagate(context, &mut rng).unwrap();
     }
-    let positions = runner.gpu.as_ref().unwrap().download_positions();
+    let positions = runner.gpu.as_ref().unwrap().download_positions().unwrap();
     (runner, positions)
 }
 

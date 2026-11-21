@@ -240,15 +240,15 @@ fn safe_inv(v: f32) -> f32 {
 #[cube(launch_unchecked)]
 #[allow(clippy::too_many_arguments)]
 pub fn baoab_step(
-    com_positions: &mut Array<f32>,
-    com_velocities: &mut Array<f32>,
-    quaternions: &mut Array<f32>,
-    angular_velocities: &mut Array<f32>,
-    com_forces: &Array<f32>,
-    torques_buf: &Array<f32>,
-    mol_masses: &Array<f32>,
-    mol_inertia: &Array<f32>,
-    mol_is_rigid: &Array<u32>,
+    com_positions: &mut [f32],
+    com_velocities: &mut [f32],
+    quaternions: &mut [f32],
+    angular_velocities: &mut [f32],
+    com_forces: &[f32],
+    torques_buf: &[f32],
+    mol_masses: &[f32],
+    mol_inertia: &[f32],
+    mol_is_rigid: &[u32],
     n_molecules: u32,
     dt: f32,
     friction: f32,
@@ -438,14 +438,14 @@ pub fn baoab_step(
 /// Only integrates rigid molecules (`mol_is_rigid[m] != 0`).
 #[cube(launch_unchecked)]
 pub fn half_kick(
-    com_velocities: &mut Array<f32>,
-    angular_velocities: &mut Array<f32>,
-    com_forces: &Array<f32>,
-    torques_buf: &Array<f32>,
-    quaternions: &Array<f32>,
-    mol_masses: &Array<f32>,
-    mol_inertia: &Array<f32>,
-    mol_is_rigid: &Array<u32>,
+    com_velocities: &mut [f32],
+    angular_velocities: &mut [f32],
+    com_forces: &[f32],
+    torques_buf: &[f32],
+    quaternions: &[f32],
+    mol_masses: &[f32],
+    mol_inertia: &[f32],
+    mol_is_rigid: &[u32],
     n_molecules: u32,
     dt: f32,
 ) {
@@ -511,7 +511,7 @@ pub fn half_kick(
 
 /// Binary search to find which molecule owns atom `atom_idx`.
 #[cube]
-fn find_molecule(mol_atom_offsets: &Array<u32>, atom_idx: u32, n_molecules: usize) -> usize {
+fn find_molecule(mol_atom_offsets: &[u32], atom_idx: u32, n_molecules: usize) -> usize {
     let mut lo = 0usize;
     let mut hi = n_molecules;
     loop {
@@ -534,12 +534,12 @@ fn find_molecule(mol_atom_offsets: &Array<u32>, atom_idx: u32, n_molecules: usiz
 /// flexible atoms are integrated directly in [`baoab_atom_step`].
 #[cube(launch_unchecked)]
 pub fn reconstruct_positions(
-    com_positions: &Array<f32>,
-    quaternions: &Array<f32>,
-    ref_positions: &Array<f32>,
-    positions: &mut Array<f32>,
-    mol_atom_offsets: &Array<u32>,
-    mol_is_rigid: &Array<u32>,
+    com_positions: &[f32],
+    quaternions: &[f32],
+    ref_positions: &[f32],
+    positions: &mut [f32],
+    mol_atom_offsets: &[u32],
+    mol_is_rigid: &[u32],
     n_atoms: u32,
     n_molecules: u32,
 ) {
@@ -592,13 +592,13 @@ pub fn reconstruct_positions(
 /// molecules get zeros (their forces stay in the per-atom buffer).
 #[cube(launch_unchecked)]
 pub fn reduce_forces_kernel(
-    forces: &Array<f32>,
-    positions: &Array<f32>,
-    com_positions: &Array<f32>,
-    mol_atom_offsets: &Array<u32>,
-    com_forces: &mut Array<f32>,
-    torques: &mut Array<f32>,
-    mol_is_rigid: &Array<u32>,
+    forces: &[f32],
+    positions: &[f32],
+    com_positions: &[f32],
+    mol_atom_offsets: &[u32],
+    com_forces: &mut [f32],
+    torques: &mut [f32],
+    mol_is_rigid: &[u32],
     n_molecules: u32,
     box_length: f32,
     inv_box: f32,
@@ -674,10 +674,10 @@ pub fn reduce_forces_kernel(
 /// reduced nonbonded + bonded contributions.
 #[cube(launch_unchecked)]
 pub fn add_extra_com_forces_kernel(
-    extra_com_forces: &Array<f32>,
-    extra_torques: &Array<f32>,
-    com_forces: &mut Array<f32>,
-    torques: &mut Array<f32>,
+    extra_com_forces: &[f32],
+    extra_torques: &[f32],
+    com_forces: &mut [f32],
+    torques: &mut [f32],
     n_molecules: u32,
 ) {
     let m = ABSOLUTE_POS;
@@ -703,11 +703,11 @@ pub fn add_extra_com_forces_kernel(
 #[cube(launch_unchecked)]
 #[allow(clippy::too_many_arguments)]
 pub fn baoab_atom_step(
-    positions: &mut Array<f32>,
-    atom_velocities: &mut Array<f32>,
-    atom_forces: &Array<f32>,
-    atom_masses: &Array<f32>,
-    atom_is_flexible: &Array<u32>,
+    positions: &mut [f32],
+    atom_velocities: &mut [f32],
+    atom_forces: &[f32],
+    atom_masses: &[f32],
+    atom_is_flexible: &[u32],
     n_atoms: u32,
     dt: f32,
     friction: f32,
@@ -790,10 +790,10 @@ pub fn baoab_atom_step(
 /// Closing B half-kick for flexible atoms using forces at the new positions.
 #[cube(launch_unchecked)]
 pub fn half_kick_atoms(
-    atom_velocities: &mut Array<f32>,
-    atom_forces: &Array<f32>,
-    atom_masses: &Array<f32>,
-    atom_is_flexible: &Array<u32>,
+    atom_velocities: &mut [f32],
+    atom_forces: &[f32],
+    atom_masses: &[f32],
+    atom_is_flexible: &[u32],
     n_atoms: u32,
     dt: f32,
 ) {

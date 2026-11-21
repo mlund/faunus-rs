@@ -19,8 +19,8 @@ fn spline_force(
     kind_i: u32,
     kind_j: u32,
     n_atom_types: u32,
-    spline_params: &Array<f32>,
-    spline_coeffs: &Array<f32>,
+    spline_params: &[f32],
+    spline_coeffs: &[f32],
     result: &mut f32,
 ) {
     let base = (kind_i * n_atom_types + kind_j) as usize * 8;
@@ -64,7 +64,8 @@ fn spline_force(
 /// return native `bool` from branching expressions. Linear scan is fine
 /// since lists are short (typically 1–3 entries for `excluded_neighbours=1`).
 #[cube]
-fn is_excluded(i: u32, j: u32, excl_offsets: &Array<u32>, excl_atoms: &Array<u32>) -> u32 {
+#[allow(clippy::needless_range_loop)] // cube code has no slice iterators
+fn is_excluded(i: u32, j: u32, excl_offsets: &[u32], excl_atoms: &[u32]) -> u32 {
     let start = excl_offsets[i as usize] as usize;
     let end = excl_offsets[i as usize + 1] as usize;
     let mut found = 0u32;
@@ -84,18 +85,18 @@ fn is_excluded(i: u32, j: u32, excl_offsets: &Array<u32>, excl_atoms: &Array<u32
 #[cube(launch_unchecked)]
 #[allow(clippy::too_many_arguments)]
 pub fn pair_forces_kernel(
-    positions: &Array<f32>,
-    atom_types: &Array<u32>,
-    mol_ids: &Array<u32>,
-    spline_params: &Array<f32>,
-    spline_coeffs: &Array<f32>,
-    excl_offsets: &Array<u32>,
-    excl_atoms: &Array<u32>,
-    mol_is_rigid: &Array<u32>,
-    cell_offsets: &Array<u32>,
-    cell_atoms: &Array<u32>,
-    neighbor_cells: &Array<u32>,
-    forces: &mut Array<f32>,
+    positions: &[f32],
+    atom_types: &[u32],
+    mol_ids: &[u32],
+    spline_params: &[f32],
+    spline_coeffs: &[f32],
+    excl_offsets: &[u32],
+    excl_atoms: &[u32],
+    mol_is_rigid: &[u32],
+    cell_offsets: &[u32],
+    cell_atoms: &[u32],
+    neighbor_cells: &[u32],
+    forces: &mut [f32],
     n_atoms: u32,
     n_atom_types: u32,
     box_length: f32,

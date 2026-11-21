@@ -25,12 +25,13 @@ const DIHEDRAL_TYPE_PERIODIC: u32 = 1;
 ///
 /// Forces are added to the existing `forces` buffer (`+=`).
 #[cube(launch_unchecked)]
+#[allow(clippy::needless_range_loop)] // cube code has no slice iterators
 pub fn bond_forces_kernel(
-    positions: &Array<f32>,
-    offsets: &Array<u32>,
-    neighbors: &Array<u32>,
-    params: &Array<f32>,
-    forces: &mut Array<f32>,
+    positions: &[f32],
+    offsets: &[u32],
+    neighbors: &[u32],
+    params: &[f32],
+    forces: &mut [f32],
     n_atoms: u32,
     box_length: f32,
     inv_box: f32,
@@ -105,11 +106,11 @@ pub fn bond_forces_kernel(
 #[cube(launch_unchecked)]
 #[allow(unused_assignments)]
 pub fn angle_forces_kernel(
-    positions: &Array<f32>,
-    offsets: &Array<u32>,
-    atoms: &Array<u32>,
-    params: &Array<f32>,
-    forces: &mut Array<f32>,
+    positions: &[f32],
+    offsets: &[u32],
+    atoms: &[u32],
+    params: &[f32],
+    forces: &mut [f32],
     n_atoms: u32,
     box_length: f32,
     inv_box: f32,
@@ -258,11 +259,11 @@ pub fn angle_forces_kernel(
 #[cube(launch_unchecked)]
 #[allow(clippy::too_many_arguments, unused_assignments)]
 pub fn dihedral_forces_kernel(
-    positions: &Array<f32>,
-    offsets: &Array<u32>,
-    atoms: &Array<u32>,
-    params: &Array<f32>,
-    forces: &mut Array<f32>,
+    positions: &[f32],
+    offsets: &[u32],
+    atoms: &[u32],
+    params: &[f32],
+    forces: &mut [f32],
     n_atoms: u32,
     box_length: f32,
     inv_box: f32,
