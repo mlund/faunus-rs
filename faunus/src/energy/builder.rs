@@ -333,7 +333,7 @@ impl PairInteraction {
                 )
             }
         };
-        log::debug!("{}", &ionion);
+        log::debug!("{}", ionion);
         ionion
     }
 
