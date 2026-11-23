@@ -615,7 +615,7 @@ impl NonbondedMatrix {
     pub(crate) fn required_cull_cutoff(&self) -> f64 {
         self.potentials
             .iter()
-            .map(PairPot::max_cutoff)
+            .map(interatomic::Cutoff::cutoff)
             .fold(0.0, f64::max)
     }
 

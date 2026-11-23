@@ -78,28 +78,9 @@ impl PairPot {
         }
     }
 
-    /// Largest separation at which either component still contributes energy.
-    ///
-    /// This is the smallest group-to-group cutoff that keeps bounding-sphere
-    /// culling exact. Note this is the *longer* of the two component ranges,
-    /// unlike [`Cutoff::cutoff`] which returns the shorter (limiting) one.
-    /// Returns infinity for unbounded potentials (bare Lennard-Jones, or
-    /// Coulomb without a cutoff), which cannot be culled without error.
-    pub(crate) fn max_cutoff(&self) -> f64 {
-        // An absent component has zero range, but its `cutoff()` reports
-        // infinity (it never limits the pair), so handle `None` explicitly.
-        // Every present variant delegates to `cutoff()`; only the absent `None` case differs.
-        #[allow(clippy::wildcard_enum_match_arm)]
-        let short_range = match self.short_range {
-            ShortRange::None => 0.0,
-            _ => self.short_range.cutoff(),
-        };
-        #[allow(clippy::wildcard_enum_match_arm)]
-        let coulomb = match self.coulomb {
-            Coulomb::None => 0.0,
-            _ => self.coulomb.cutoff(),
-        };
-        short_range.max(coulomb)
+    /// True if an electrostatic component is present.
+    pub const fn has_coulomb(&self) -> bool {
+        !matches!(self.coulomb, Coulomb::None)
     }
 }
 
@@ -136,8 +117,9 @@ macro_rules! dispatch_coulomb {
 // ─── Cutoff ───────────────────────────────────────────────────────────────────
 
 impl Cutoff for ShortRange {
+    /// An absent component has zero range: the identity of the max in `PairPot::cutoff`.
     fn cutoff(&self) -> f64 {
-        dispatch_short_range!(self, cutoff, f64::INFINITY,)
+        dispatch_short_range!(self, cutoff, 0.0,)
     }
     fn lower_cutoff(&self) -> f64 {
         dispatch_short_range!(self, lower_cutoff, 0.0,)
@@ -146,7 +128,7 @@ impl Cutoff for ShortRange {
 
 impl Cutoff for Coulomb {
     fn cutoff(&self) -> f64 {
-        dispatch_coulomb!(self, cutoff, f64::INFINITY,)
+        dispatch_coulomb!(self, cutoff, 0.0,)
     }
     fn lower_cutoff(&self) -> f64 {
         dispatch_coulomb!(self, lower_cutoff, 0.0,)
@@ -154,8 +136,9 @@ impl Cutoff for Coulomb {
 }
 
 impl Cutoff for PairPot {
+    /// Interaction range: the longer of the two components, so culling at it is exact.
     fn cutoff(&self) -> f64 {
-        self.short_range.cutoff().min(self.coulomb.cutoff())
+        self.short_range.cutoff().max(self.coulomb.cutoff())
     }
 
     /// Matches `Combined` behavior: use the larger lower cutoff.
