@@ -1108,7 +1108,8 @@ This accelerates the energy without changing it, and — unlike
 <blockquote>
 <p>Correctness: <code>cutoff</code> must be ≥ the longest per-pair potential range
 (here the 50 Å electrostatics), since a culled group pair skips <em>all</em> of its
-atom–atom interactions. This is checked at startup: a shorter cutoff, or any
+atom–atom interactions. A pair with several terms reaches as far as its
+longest term. This is checked at startup: a shorter cutoff, or any
 unbounded potential (e.g. Lennard-Jones or Coulomb without a cutoff), is
 rejected with an error rather than silently dropping interactions.</p>
 <p>Culling needs a center of mass, so it only applies to molecules with
@@ -1147,7 +1148,7 @@ or generated from atom properties (<code>sigma</code>, <code>epsilon</code>) via
 <tr>
 <td><code>!KimHummer</code></td>
 <td><code>!KH</code></td>
-<td><code>sigma</code>/<code>σ</code>, <code>epsilon</code>/<code>eps</code>/<code>ε</code></td>
+<td><code>sigma</code>/<code>σ</code>, <code>epsilon</code>/<code>eps</code>/<code>ε</code>; optional <code>cutoff</code>/<code>rc</code> (energy-shifted to zero there)</td>
 </tr>
 <tr>
 <td><code>!AshbaughHatch</code></td>
@@ -1164,7 +1165,11 @@ or generated from atom properties (<code>sigma</code>, <code>epsilon</code>) via
 <p>When using a combination rule, specify <code>mixing</code> instead of explicit parameters:</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LorentzBerthelot</span><span class="p p-Indicator">}</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!KimHummer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LorentzBerthelot</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">25.0</span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p>A mixing <code>cutoff</code> is accepted only by <code>!AshbaughHatch</code> and <code>!KimHummer</code>, which
+shift the energy to zero there; the others reject it. For Lennard-Jones cut
+and shifted at rc, use <code>!AshbaughHatch</code> with <code>hydrophobicity: !Lambda 1.0</code>.</p>
 <h4 id="ashbaugh-hatch-wca-mode">Ashbaugh-Hatch WCA mode<a class="headerlink" href="#ashbaugh-hatch-wca-mode" title="Permanent link">&para;</a></h4>
 <p>Setting <code>wca: true</code> on <code>!AshbaughHatch</code> makes the potential purely repulsive
 (Weeks-Chandler-Andersen) by setting λ=1 and cutoff=σ·2^(1/6),
