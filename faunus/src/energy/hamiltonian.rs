@@ -137,7 +137,7 @@ impl Hamiltonian {
                 &nonbonded,
                 spline_opts.cutoff,
                 Some(config),
-            );
+            )?;
             // Without a medium the temperature is unknown; room temperature still
             // gives a meaningful scale for the tolerance.
             let thermal_energy = medium.as_ref().map_or(

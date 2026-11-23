@@ -106,19 +106,40 @@ pub struct MixingParams<T> {
 /// per-type mixing logic that was previously duplicated across five
 /// `PairInteraction::to_boxed` match arms.
 pub trait FromMixing: IsotropicTwobodyEnergy + Clone + 'static {
+    /// Whether a mixing `cutoff` is honoured. Required, so no type silently drops one.
+    const CUTOFF: MixingCutoff;
     fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self>;
 }
 
+/// How a mixed potential treats a `cutoff` key.
+pub enum MixingCutoff {
+    /// Truncates at the cutoff.
+    Accepted,
+    /// Can't be truncated; the hint says what to use instead.
+    Refused(&'static str),
+}
+
+const FIXED_RANGE: MixingCutoff = MixingCutoff::Refused("its range is fixed by σ");
+
 impl FromMixing for KimHummer {
-    fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
-        Ok(Self::new(
+    const CUTOFF: MixingCutoff = MixingCutoff::Accepted;
+    fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self> {
+        let kh = Self::new(
             combined.epsilon().context("Epsilons not defined!")?,
             combined.sigma().context("Sigmas not defined!")?,
-        ))
+        );
+        Ok(match cutoff {
+            Some(rc) => kh.with_cutoff(rc)?,
+            None => kh,
+        })
     }
 }
 
 impl FromMixing for LennardJones {
+    const CUTOFF: MixingCutoff = MixingCutoff::Refused(
+        "for Lennard-Jones cut and shifted at rc use !AshbaughHatch \
+         {mixing: …, cutoff: rc} with hydrophobicity !Lambda 1.0",
+    );
     fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
         Ok(Self::new(
             combined.epsilon().context("Epsilons not defined!")?,
@@ -128,6 +149,7 @@ impl FromMixing for LennardJones {
 }
 
 impl FromMixing for WeeksChandlerAndersen {
+    const CUTOFF: MixingCutoff = FIXED_RANGE;
     fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
         Ok(Self::new(
             combined.epsilon().context("Epsilons not defined!")?,
@@ -137,12 +159,14 @@ impl FromMixing for WeeksChandlerAndersen {
 }
 
 impl FromMixing for HardSphere {
+    const CUTOFF: MixingCutoff = FIXED_RANGE;
     fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
         Ok(Self::new(combined.sigma().context("Sigmas not defined!")?))
     }
 }
 
 impl FromMixing for AshbaughHatch {
+    const CUTOFF: MixingCutoff = MixingCutoff::Accepted;
     fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self> {
         let lj = LennardJones::new(
             combined.epsilon().context("Epsilons not defined!")?,
@@ -162,6 +186,10 @@ impl<T: FromMixing> DirectOrMixing<T> {
         match self {
             Self::Direct(inner) => Ok(inner.clone()),
             Self::Mixing(params) => {
+                if let (MixingCutoff::Refused(hint), Some(_)) = (T::CUTOFF, params.cutoff) {
+                    let name = std::any::type_name::<T>().rsplit("::").next().unwrap_or("");
+                    anyhow::bail!("!{name} takes no mixing cutoff: {hint}");
+                }
                 let combined = AtomKind::combine(params.mixing, atom1, atom2);
                 T::from_mixing(&combined, params.cutoff)
             }

@@ -34,13 +34,24 @@ pub struct SquareMatrix<T> {
 impl<T> SquareMatrix<T> {
     /// Build an `order × order` matrix from a function of the row and column.
     pub(crate) fn from_fn(order: usize, mut f: impl FnMut(usize, usize) -> T) -> Self {
+        match Self::try_from_fn(order, |i, j| Ok::<_, std::convert::Infallible>(f(i, j))) {
+            Ok(matrix) => matrix,
+            Err(never) => match never {},
+        }
+    }
+
+    /// As [`Self::from_fn`], stopping at the first error.
+    pub(crate) fn try_from_fn<E>(
+        order: usize,
+        mut f: impl FnMut(usize, usize) -> Result<T, E>,
+    ) -> Result<Self, E> {
         let mut data = Vec::with_capacity(order * order);
         for i in 0..order {
             for j in 0..order {
-                data.push(f(i, j));
+                data.push(f(i, j)?);
             }
         }
-        Self { data, order }
+        Ok(Self { data, order })
     }
 
     /// Number of rows, which equals the number of columns.

@@ -149,7 +149,8 @@ system:
 
 > Correctness: `cutoff` must be ≥ the longest per-pair potential range
 > (here the 50 Å electrostatics), since a culled group pair skips *all* of its
-> atom–atom interactions. This is checked at startup: a shorter cutoff, or any
+> atom–atom interactions. A pair with several terms reaches as far as its
+> longest term. This is checked at startup: a shorter cutoff, or any
 > unbounded potential (e.g. Lennard-Jones or Coulomb without a cutoff), is
 > rejected with an error rather than silently dropping interactions.
 >
@@ -170,7 +171,7 @@ or generated from atom properties (`sigma`, `epsilon`) via a combination rule.
 | `!LennardJones`            |         | `sigma`/`σ`, `epsilon`/`eps`/`ε` |
 | `!WeeksChandlerAndersen`   | `!WCA`  | `sigma`/`σ`, `epsilon`/`eps`/`ε` |
 | `!HardSphere`              |         | (mixing only)                  |
-| `!KimHummer`               | `!KH`   | `sigma`/`σ`, `epsilon`/`eps`/`ε` |
+| `!KimHummer`               | `!KH`   | `sigma`/`σ`, `epsilon`/`eps`/`ε`; optional `cutoff`/`rc` (energy-shifted to zero there) |
 | `!AshbaughHatch`           | `!AH`   | (mixing only, requires `cutoff`); or `wca: true` for purely repulsive |
 | `!CustomPotential`         |         | `function`, `cutoff`, `constants` |
 
@@ -179,7 +180,12 @@ When using a combination rule, specify `mixing` instead of explicit parameters:
 ```yaml
 - !LennardJones {mixing: LorentzBerthelot}
 - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+- !KimHummer {mixing: LorentzBerthelot, cutoff: 25.0}
 ```
+
+A mixing `cutoff` is accepted only by `!AshbaughHatch` and `!KimHummer`, which
+shift the energy to zero there; the others reject it. For Lennard-Jones cut
+and shifted at rc, use `!AshbaughHatch` with `hydrophobicity: !Lambda 1.0`.
 
 #### Ashbaugh-Hatch WCA mode
 

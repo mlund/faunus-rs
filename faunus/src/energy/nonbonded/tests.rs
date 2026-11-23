@@ -2,6 +2,7 @@ use std::{cell::RefCell, sync::Arc};
 
 use float_cmp::assert_approx_eq;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig};
+use interatomic::Cutoff;
 
 use crate::{
     backend::Backend,
@@ -610,7 +611,7 @@ fn test_nonbonded_matrix_energy() {
 fn get_test_splined_matrix() -> (Backend, NonbondedMatrix, NonbondedMatrixSplined) {
     let (system, nonbonded) = get_test_matrix();
     let cutoff = 15.0; // Use a cutoff that covers all test distances
-    let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);
+    let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None).unwrap();
     (system, nonbonded, splined)
 }
 
@@ -755,11 +756,13 @@ fn test_nonbonded_matrix_splined_with_config() {
 
     // Test with high accuracy config
     let config = SplineConfig::high_accuracy();
-    let splined_high = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
+    let splined_high =
+        NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config)).unwrap();
 
     // Test with fast config
     let config = SplineConfig::fast();
-    let splined_fast = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
+    let splined_fast =
+        NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config)).unwrap();
 
     // Both should produce reasonable energies
     let energy_high = splined_high.total_nonbonded_reference(&system);
@@ -910,7 +913,7 @@ fn test_force_vector_vs_energy_gradient() {
 #[test]
 fn test_splined_forces_match_analytical() {
     let (system, nonbonded) = get_test_matrix();
-    let splined = NonbondedMatrixSplined::from(&nonbonded);
+    let splined = NonbondedMatrixSplined::try_from(&nonbonded).unwrap();
 
     let analytical_forces = nonbonded.forces(&system);
     let splined_forces = splined.forces(&system);
@@ -1108,15 +1111,26 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 }
 
-/// The exact pair matrix of `yaml`, in its `system/medium`.
-fn matrix_from_yaml(yaml: &str) -> NonbondedMatrix {
+/// Topology, Hamiltonian builder and medium parsed from one YAML input.
+fn inputs_from_yaml(
+    yaml: &str,
+) -> anyhow::Result<(Topology, HamiltonianBuilder, interatomic::coulomb::Medium)> {
     use std::io::Write;
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    tmp.write_all(yaml.as_bytes()).unwrap();
-    let topology = Topology::from_file(tmp.path()).unwrap();
-    let builder = HamiltonianBuilder::from_file(tmp.path()).unwrap();
-    let medium = crate::backend::get_medium_str(yaml).unwrap();
-    NonbondedMatrix::new(builder.nonbonded().unwrap(), &topology, Some(medium)).unwrap()
+    let mut tmp = tempfile::NamedTempFile::new()?;
+    tmp.write_all(yaml.as_bytes())?;
+    let topology = Topology::from_file(tmp.path())?;
+    let builder = HamiltonianBuilder::from_file(tmp.path())?;
+    Ok((topology, builder, crate::backend::get_medium_str(yaml)?))
+}
+
+/// The exact pair matrix of `yaml`, in its `system/medium`.
+fn try_matrix_from_yaml(yaml: &str) -> anyhow::Result<NonbondedMatrix> {
+    let (topology, builder, medium) = inputs_from_yaml(yaml)?;
+    NonbondedMatrix::new(builder.nonbonded().unwrap(), &topology, Some(medium))
+}
+
+fn matrix_from_yaml(yaml: &str) -> NonbondedMatrix {
+    try_matrix_from_yaml(yaml).unwrap()
 }
 
 /// A cubic system from YAML input, with a factory for matrices independent of the system's own.
@@ -1350,7 +1364,7 @@ fn backend_from_input(yaml: &str) -> Backend {
 
 fn backend_with_spline(yaml: &str) -> (Backend, NonbondedMatrixSplined) {
     let (_, new_matrix) = backend_from_yaml(yaml, 12.0);
-    let spline = NonbondedMatrixSplined::from_nonbonded(&new_matrix(), 5.0, None);
+    let spline = NonbondedMatrixSplined::from_nonbonded(&new_matrix(), 5.0, None).unwrap();
     (backend_from_input(yaml), spline)
 }
 
@@ -1772,7 +1786,7 @@ fn coarse_spline_table_is_flagged() {
         n_points: 10,
         ..Default::default()
     };
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config)).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY)
         .expect("a ten-point table must be flagged");
     // Far beyond the 0.01 kT tolerance, and on the steep wall where the grid is sparse.
@@ -1803,7 +1817,7 @@ fn default_spline_table_with_shifted_coulomb_is_accurate() {
         shift_energy: true,
         ..Default::default()
     };
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config)).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
     assert_eq!(worst, None);
 }
@@ -1813,7 +1827,174 @@ fn default_spline_table_with_shifted_coulomb_is_accurate() {
 #[test]
 fn coulomb_truncated_at_spline_cutoff_is_accurate() {
     let exact = charged_pair_matrix(12.0);
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, None);
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, None).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
     assert_eq!(worst, None);
+}
+
+// ====== Pair-potential range (one meaning per cutoff) ======
+
+/// The single self-pair potential of a charged, hydrophobic bead given `terms` as YAML.
+fn try_self_pair(terms: &str) -> anyhow::Result<PairPot> {
+    let matrix = try_matrix_from_yaml(&bead_yaml(terms))?;
+    Ok(matrix.get_potentials()[(0, 0)].clone())
+}
+
+/// One charged bead (σ = 4, ε = 1, λ = 0.5) whose self-pair is `terms`.
+fn bead_yaml(terms: &str) -> String {
+    format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 4.0, eps: 1.0, charge: 1.0, \
+         hydrophobicity: !Lambda 0.5}}\n\
+         molecules:\n  - {{name: M, atoms: [A], atomic: true}}\n\
+         system:\n  cell: !Cuboid [100.0, 100.0, 100.0]\n  \
+         medium: {{permittivity: !Water, temperature: 298.15}}\n  \
+         energy:\n    - !Nonbonded\n        default: [{terms}]\n  \
+         blocks:\n    - {{molecule: M, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}}\n"
+    )
+}
+
+/// Lennard-Jones, written out as the independent reference for the tests below.
+fn lj(epsilon: f64, sigma: f64, r: f64) -> f64 {
+    4.0 * epsilon * ((sigma / r).powi(12) - (sigma / r).powi(6))
+}
+
+fn self_pair(terms: &str) -> PairPot {
+    try_self_pair(terms).unwrap()
+}
+
+/// [F1, F2] Bare Lennard-Jones is unbounded and has no electrostatics.
+#[test]
+fn lennard_jones_pair_is_unbounded() {
+    let pair = self_pair("!LennardJones {mixing: LB}");
+    assert_eq!(pair.cutoff(), f64::INFINITY);
+    assert!(!pair.has_coulomb());
+}
+
+/// [F1] A truncated short-range term sets the pair's range.
+#[test]
+fn ashbaugh_hatch_pair_range_is_its_cutoff() {
+    let pair = self_pair("!AshbaughHatch {mixing: LB, cutoff: 20.0}");
+    assert_eq!(pair.cutoff(), 20.0);
+    assert!(!pair.has_coulomb());
+}
+
+/// [F1, F2] Short-range and Coulomb: the pair reaches as far as the longer of the two.
+#[test]
+fn pair_range_is_the_longer_of_short_range_and_coulomb() {
+    let pair = self_pair("!AshbaughHatch {mixing: LB, cutoff: 20.0}, !Coulomb {cutoff: 50.0}");
+    assert_eq!(pair.cutoff(), 50.0);
+    assert!(pair.has_coulomb());
+}
+
+/// [F1, F2] Coulomb alone sets the range; with no terms the pair has zero range.
+#[test]
+fn coulomb_only_and_empty_pair_ranges() {
+    let coulomb = self_pair("!Coulomb {cutoff: 50.0}");
+    assert_eq!(coulomb.cutoff(), 50.0);
+    assert!(coulomb.has_coulomb());
+    let empty = self_pair("");
+    assert_eq!(empty.cutoff(), 0.0);
+    assert!(!empty.has_coulomb());
+}
+
+/// [F1] Summed short-range terms reach as far as the longest; the longer one still acts at 30 Å.
+#[test]
+fn summed_short_range_terms_reach_the_longest() {
+    let pair = self_pair(
+        "!AshbaughHatch {mixing: LB, cutoff: 20.0}, !AshbaughHatch {mixing: LB, cutoff: 40.0}",
+    );
+    assert_eq!(pair.cutoff(), 40.0);
+    // Only AH 40 acts at 30 Å, beyond its wall: λ(LJ(30) − LJ(40)) with λ = 0.5, σ = 4, ε = 1.
+    let expected = 0.5 * (lj(1.0, 4.0, 30.0) - lj(1.0, 4.0, 40.0));
+    assert_approx_eq!(
+        f64,
+        pair.isotropic_twobody_energy(30.0 * 30.0),
+        expected,
+        epsilon = 1e-15
+    );
+    let unbounded =
+        self_pair("!AshbaughHatch {mixing: LB, cutoff: 20.0}, !LennardJones {mixing: LB}");
+    assert_eq!(unbounded.cutoff(), f64::INFINITY);
+}
+
+/// [F3] Culling at 25 Å would drop the Lennard-Jones tail of an AH 20 + LJ pair.
+/// Regression: the sum once reported its shorter term's range and was accepted.
+#[test]
+fn culling_rejects_a_sum_with_an_unbounded_term() {
+    let yaml = bead_yaml("!AshbaughHatch {mixing: LB, cutoff: 20.0}, !LennardJones {mixing: LB}");
+    let (topology, mut builder, medium) = inputs_from_yaml(&yaml).unwrap();
+    builder.set_nonbonded_cutoff(Some(25.0));
+    assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
+}
+
+/// [F4] A mixing cutoff on Kim-Hummer truncates and shifts it; omitted, it is untruncated.
+#[test]
+fn kim_hummer_mixing_honours_cutoff() {
+    let cut = self_pair("!KimHummer {mixing: LB, cutoff: 15.0}");
+    let uncut = self_pair("!KimHummer {mixing: LB}");
+    assert_eq!(cut.cutoff(), 15.0);
+    assert_eq!(uncut.cutoff(), f64::INFINITY);
+    // σ = 4, ε = 1 > 0: beyond r₀ = 2^(1/6)σ the published form is −4ε[(σ/r)¹² − (σ/r)⁶].
+    let u = |r: f64| -lj(1.0, 4.0, r);
+    let expected = u(10.0) - u(15.0);
+    assert_approx_eq!(
+        f64,
+        cut.isotropic_twobody_energy(100.0),
+        expected,
+        epsilon = 1e-15
+    );
+    assert_eq!(cut.isotropic_twobody_energy(15.0 * 15.0), 0.0);
+}
+
+/// [F4] Potentials that can't be truncated refuse a mixing cutoff rather than drop it.
+#[test]
+fn mixing_cutoff_is_refused_where_it_cannot_be_honoured() {
+    for name in ["LennardJones", "WeeksChandlerAndersen", "HardSphere"] {
+        let err = try_self_pair(&format!("!{name} {{mixing: LB, cutoff: 30.0}}")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("takes no mixing cutoff"),
+            "{name}: {err:#}"
+        );
+    }
+}
+
+/// [F5] Ashbaugh-Hatch at λ = 1 is Lennard-Jones cut and shifted at rc (the Pasquier lipase model).
+#[test]
+fn ashbaugh_hatch_at_unit_lambda_is_cut_and_shifted_lennard_jones() {
+    let yaml = "atoms:\n  \
+         - {name: A, mass: 1.0, sigma: 4.0, eps: 1.0, hydrophobicity: !Lambda 1.0}\n  \
+         - {name: B, mass: 1.0, sigma: 6.0, eps: 0.25, hydrophobicity: !Lambda 1.0}\n\
+         molecules:\n  - {name: M, atoms: [A, B]}\n\
+         system:\n  cell: !Cuboid [200.0, 200.0, 200.0]\n  \
+         medium: {permittivity: !Water, temperature: 298.15}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          \
+         - !AshbaughHatch {mixing: LorentzBerthelot, cutoff: 46.9}\n  \
+         blocks:\n    - {molecule: M, N: 1, insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]}\n";
+    let pair = matrix_from_yaml(yaml).get_potentials()[(0, 1)].clone();
+    // Lorentz-Berthelot by hand: σ = (4 + 6)/2, ε = √(1 · 0.25)
+    let (sigma, epsilon) = (5.0_f64, 0.5_f64);
+    let lj = |r: f64| lj(epsilon, sigma, r);
+    assert_eq!(pair.cutoff(), 46.9);
+    for r in [4.5, 5.0, 8.0, 20.0] {
+        let expected = lj(r) - lj(46.9);
+        assert_approx_eq!(
+            f64,
+            pair.isotropic_twobody_energy(r * r),
+            expected,
+            epsilon = 1e-12
+        );
+    }
+    assert_eq!(pair.isotropic_twobody_energy(50.0 * 50.0), 0.0);
+}
+
+/// A spline that can't be built names the atom-type pair, so a large topology is debuggable.
+#[test]
+fn spline_error_names_the_pair() {
+    let config = SplineConfig {
+        n_points: 2,
+        ..Default::default()
+    };
+    let err =
+        NonbondedMatrixSplined::from_nonbonded(&lj_pair_matrix(), 12.0, Some(config)).unwrap_err();
+    assert!(format!("{err:#}").contains("atom types 0 and 0"), "{err:#}");
 }
