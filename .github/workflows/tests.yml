@@ -31,6 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.features }}
+          cache-on-failure: true # a failing gpu job would otherwise never refresh its cache
       - name: Install lavapipe
         if: matrix.features == 'gpu'
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
