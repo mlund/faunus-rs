@@ -31,8 +31,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.features }}
+          cache-on-failure: true # a failing gpu job would otherwise never refresh its cache
       - name: Install lavapipe
         if: matrix.features == 'gpu'
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
       - name: cargo test
-        run: cargo test -p faunus --lib --features "${{ matrix.features }}"
+        # Parallel GPU tests SIGSEGV on lavapipe; serial is ~20 s.
+        run: cargo test -p faunus --lib --features "${{ matrix.features }}" -- ${{ matrix.features == 'gpu' && '--test-threads=1' || '' }}
