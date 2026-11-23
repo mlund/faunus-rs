@@ -610,7 +610,7 @@ fn test_nonbonded_matrix_energy() {
 fn get_test_splined_matrix() -> (Backend, NonbondedMatrix, NonbondedMatrixSplined) {
     let (system, nonbonded) = get_test_matrix();
     let cutoff = 15.0; // Use a cutoff that covers all test distances
-    let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);
+    let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None).unwrap();
     (system, nonbonded, splined)
 }
 
@@ -755,11 +755,11 @@ fn test_nonbonded_matrix_splined_with_config() {
 
     // Test with high accuracy config
     let config = SplineConfig::high_accuracy();
-    let splined_high = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
+    let splined_high = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config)).unwrap();
 
     // Test with fast config
     let config = SplineConfig::fast();
-    let splined_fast = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
+    let splined_fast = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config)).unwrap();
 
     // Both should produce reasonable energies
     let energy_high = splined_high.total_nonbonded_reference(&system);
@@ -910,7 +910,7 @@ fn test_force_vector_vs_energy_gradient() {
 #[test]
 fn test_splined_forces_match_analytical() {
     let (system, nonbonded) = get_test_matrix();
-    let splined = NonbondedMatrixSplined::from(&nonbonded);
+    let splined = NonbondedMatrixSplined::try_from(&nonbonded).unwrap();
 
     let analytical_forces = nonbonded.forces(&system);
     let splined_forces = splined.forces(&system);
@@ -1350,7 +1350,7 @@ fn backend_from_input(yaml: &str) -> Backend {
 
 fn backend_with_spline(yaml: &str) -> (Backend, NonbondedMatrixSplined) {
     let (_, new_matrix) = backend_from_yaml(yaml, 12.0);
-    let spline = NonbondedMatrixSplined::from_nonbonded(&new_matrix(), 5.0, None);
+    let spline = NonbondedMatrixSplined::from_nonbonded(&new_matrix(), 5.0, None).unwrap();
     (backend_from_input(yaml), spline)
 }
 
@@ -1772,7 +1772,7 @@ fn coarse_spline_table_is_flagged() {
         n_points: 10,
         ..Default::default()
     };
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config)).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY)
         .expect("a ten-point table must be flagged");
     // Far beyond the 0.01 kT tolerance, and on the steep wall where the grid is sparse.
@@ -1803,7 +1803,7 @@ fn default_spline_table_with_shifted_coulomb_is_accurate() {
         shift_energy: true,
         ..Default::default()
     };
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config)).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
     assert_eq!(worst, None);
 }
@@ -1813,7 +1813,19 @@ fn default_spline_table_with_shifted_coulomb_is_accurate() {
 #[test]
 fn coulomb_truncated_at_spline_cutoff_is_accurate() {
     let exact = charged_pair_matrix(12.0);
-    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, None);
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, None).unwrap();
     let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
     assert_eq!(worst, None);
+}
+
+/// A spline that can't be built names the atom-type pair, so a large topology is debuggable.
+#[test]
+fn spline_error_names_the_pair() {
+    let config = SplineConfig {
+        n_points: 2,
+        ..Default::default()
+    };
+    let err =
+        NonbondedMatrixSplined::from_nonbonded(&lj_pair_matrix(), 12.0, Some(config)).unwrap_err();
+    assert!(format!("{err:#}").contains("atom types 0 and 0"), "{err:#}");
 }

@@ -23,6 +23,7 @@ use super::group_pair_cache::{row_from_pairs, GroupPairCache, GroupPairs};
 use super::pairpot::PairPot;
 use super::stateful::{derived_energy, StatefulEnergy};
 use crate::ObserveContext;
+use anyhow::Context as _;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
 use std::path::Path;
 
@@ -695,13 +696,13 @@ impl NonbondedMatrix<SplinedPotential> {
     /// # Example
     /// ```ignore
     /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
-    /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None);
+    /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None)?;
     /// ```
     pub fn from_nonbonded(
         nonbonded: &NonbondedMatrix,
         cutoff: f64,
         config: Option<SplineConfig>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let config = config.unwrap_or_default();
         let source = nonbonded.get_potentials();
 
@@ -720,19 +721,20 @@ impl NonbondedMatrix<SplinedPotential> {
             );
         }
 
-        let potentials = SquareMatrix::from_fn(source.order(), |i, j| {
+        let potentials = SquareMatrix::try_from_fn(source.order(), |i, j| {
             let potential = source.get((i, j)).expect("Index should be valid");
             SplinedPotential::with_cutoff(potential, cutoff, config.clone())
-        });
+                .with_context(|| format!("spline for atom types {i} and {j}"))
+        })?;
 
-        Self {
+        Ok(Self {
             potentials,
             exclusions: nonbonded.exclusions.clone(),
             cache: GroupPairCache::default(),
             cutoff: Some(cutoff),
             use_bounding_spheres: true,
             molecule_pair_exclusions: nonbonded.molecule_pair_exclusions.clone(),
-        }
+        })
     }
 }
 
@@ -742,12 +744,14 @@ impl From<NonbondedMatrixSplined> for EnergyTerm {
     }
 }
 
-impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
+impl TryFrom<&NonbondedMatrix> for NonbondedMatrixSplined {
+    type Error = anyhow::Error;
+
     /// Create a splined nonbonded matrix from a reference to [`NonbondedMatrix`]
     /// using default spline configuration and a cutoff of 15.0 Å.
     ///
     /// For custom cutoff or configuration, use [`NonbondedMatrixSplined::from_nonbonded`] instead.
-    fn from(nonbonded: &NonbondedMatrix) -> Self {
+    fn try_from(nonbonded: &NonbondedMatrix) -> Result<Self, Self::Error> {
         Self::from_nonbonded(nonbonded, 15.0, None)
     }
 }
