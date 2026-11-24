@@ -1110,6 +1110,7 @@ If <code>molecule</code> is specified, the atom is chosen from that molecule typ
 If <code>atom</code> is specified, only atoms of that type are selected.</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.1</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.2</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Lipid</span><span class="p p-Indicator">,</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">HEAD</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> directions</span><span class="p">:</span><span class="w"> </span><span class="nv">xy</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1150,6 +1151,12 @@ If <code>atom</code> is specified, only atoms of that type are selected.</p>
 <td>no</td>
 <td>1</td>
 <td>Repetitions per selection</td>
+</tr>
+<tr>
+<td><code>directions</code></td>
+<td>no</td>
+<td><code>xyz</code></td>
+<td>Active directions (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, <code>xz</code>, <code>yz</code>, <code>xyz</code>)</td>
 </tr>
 <tr>
 <td><code>preferential</code></td>
