@@ -863,9 +863,11 @@ mod tests {
             1,
             5,
             BlockActivationStatus::All,
-            Some(&InsertionPolicy::FromFile(InputPath::new(
-                "mol2_absolute.xyz".to_owned().into(),
-                "tests/files/topology_pass.yaml",
+            Some(&InsertionPolicy::FromFile(block::StructureFile::new(
+                InputPath::new(
+                    "mol2_absolute.xyz".to_owned().into(),
+                    "tests/files/topology_pass.yaml",
+                ),
             ))),
         );
     }

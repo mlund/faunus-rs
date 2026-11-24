@@ -21,7 +21,8 @@ use rand::Rng;
 use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
 
-use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
+use super::structure::{self, Origin};
+use super::{molecule::MoleculeKind, AtomKind, InputPath};
 use crate::axes::Axes;
 use crate::transform;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Point};
@@ -87,12 +88,79 @@ impl<'de> Deserialize<'de> for BlockActivationStatus {
     }
 }
 
+/// A structure file to read a block from: `!FromFile path`, or `!FromFile {file, origin}`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructureFile {
+    file: InputPath,
+    origin: Origin,
+}
+
+impl StructureFile {
+    #[cfg(test)]
+    pub(crate) const fn new(file: InputPath) -> Self {
+        Self {
+            file,
+            origin: Origin::Corner,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StructureFile {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Full {
+            file: InputPath,
+            #[serde(default)]
+            origin: Origin,
+        }
+        struct StructureFileVisitor;
+        impl<'de> serde::de::Visitor<'de> for StructureFileVisitor {
+            type Value = StructureFile;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a file path, or a mapping {file, origin}")
+            }
+            fn visit_str<E: serde::de::Error>(self, path: &str) -> Result<Self::Value, E> {
+                Ok(StructureFile {
+                    file: InputPath {
+                        raw_path: path.into(),
+                        path: None,
+                    },
+                    origin: Origin::default(),
+                })
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let Full { file, origin } =
+                    Full::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(StructureFile { file, origin })
+            }
+        }
+        deserializer.deserialize_any(StructureFileVisitor)
+    }
+}
+
+impl Serialize for StructureFile {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        if self.origin == Origin::default() {
+            return self.file.serialize(serializer);
+        }
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("file", &self.file)?;
+        map.serialize_entry("origin", &self.origin)?;
+        map.end()
+    }
+}
+
 /// Specifies how the structure of molecules of a molecule block should be obtained or generated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum InsertionPolicy {
     /// Read molecule block from a file.
-    FromFile(InputPath),
+    FromFile(StructureFile),
     /// Place the atoms of each molecule of the block to random positions in the simulation cell.
     RandomAtomPos {
         #[serde(default)]
@@ -155,10 +223,14 @@ impl InsertionPolicy {
         rng: &mut impl Rng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
-            Self::FromFile(filename) => {
-                let pos =
-                    structure::positions_from_structure_file(filename.path().unwrap(), Some(cell))?;
-                Ok(pos)
+            Self::FromFile(structure) => {
+                use anyhow::Context as _;
+                let path = structure
+                    .file
+                    .path()
+                    .expect("path is finalized when the topology loads");
+                structure::positions_from_structure_file(path, cell, structure.origin)
+                    .with_context(|| format!("block for molecule '{}'", molecule_kind.name()))
             }
 
             Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
@@ -465,7 +537,7 @@ impl InsertionPolicy {
     /// (if it is absolute) or as a path relative to `filename`.
     pub(super) fn finalize_path(&mut self, filename: impl AsRef<Path>) {
         if let Self::FromFile(x) = self {
-            x.finalize(filename);
+            x.file.finalize(filename);
         }
     }
 }
@@ -686,6 +758,47 @@ mod tests {
             .to_string();
         assert!(err.contains("all"), "unexpected message: {err}");
         assert!(yaml_serde::from_str::<BlockActivationStatus>("-1").is_err());
+    }
+
+    /// The map form carries `origin`; the bare path keeps the corner default, and a
+    /// mismatch names the block rather than surfacing later as an infinite energy.
+    #[test]
+    fn from_file_origin_reaches_the_positions() {
+        let dir = tempfile::tempdir().unwrap();
+        let structure = dir.path().join("centred.xyz");
+        std::fs::write(&structure, "1\n\nA 1.0 2.0 -4.0\n").unwrap();
+        let input = |insert: &str| {
+            format!(
+                r#"
+atoms:
+  - {{name: A, mass: 1.0}}
+molecules:
+  - {{name: MOL, atoms: [A]}}
+system:
+  cell: !Slit [10.0, 10.0, 10.0]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: []
+  blocks:
+    - {{molecule: MOL, N: 1, insert: {insert}}}
+"#
+            )
+        };
+        let build = |insert: &str| {
+            let file = dir.path().join("input.yaml");
+            std::fs::write(&file, input(insert)).unwrap();
+            Backend::new(&file, None, &mut rand::thread_rng())
+        };
+        let path = structure.display();
+        let centred = build(&format!("!FromFile {{file: {path}, origin: center}}")).unwrap();
+        assert_eq!(
+            centred.groups()[0]
+                .iter_active()
+                .next()
+                .map(|i| centred.position(i)),
+            Some(crate::Point::new(1.0, 2.0, -4.0))
+        );
+        let err = build(&format!("!FromFile {path}")).unwrap_err();
+        assert!(format!("{err:#}").contains("MOL"), "{err:#}");
     }
 
     fn backend_from_str(yaml: &str) -> Backend {

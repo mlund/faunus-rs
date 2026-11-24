@@ -390,6 +390,7 @@ duplicates are automatically excluded.
 
 Writes particle coordinates to a trajectory file at each sampled step.
 The format is auto-detected from the file extension (`.xyz` or `.xtc`).
+Coordinates have their origin at a box corner (positions + ½ box), as `!FromFile` expects.
 
 On finalization a companion PSF topology file and a VMD scene script are
 written alongside the trajectory. The PSF contains atoms, bonds, angles,

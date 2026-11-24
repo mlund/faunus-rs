@@ -80,3 +80,4 @@ cell: !Endless                                     # infinite
 - Use `replace:` for pairs that fully override `default`; `append:` for pairs that extend it
 - `!Stochastic` collections for mixed molecule types; `!Deterministic` with `cycles` for sweeps
 - Unknown keys are rejected (`deny_unknown_fields`): a mistyped key errors rather than being ignored
+- `!FromFile` assumes a corner-origin file (as trajectories are written); use `!FromFile {file: x.xyz, origin: center}` for a box-centred one
