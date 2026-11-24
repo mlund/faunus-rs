@@ -560,6 +560,14 @@ pub trait GroupCollection {
     /// selection's outcome can depend on.
     fn atom_kinds_generation(&self) -> u64;
 
+    /// Atoms whose kind changed after `generation`, oldest first.
+    ///
+    /// `None` when the context cannot say, which forces a full re-resolve; the default is
+    /// therefore always correct, only slower.
+    fn atom_kind_changes_since(&self, _generation: u64) -> Option<&[usize]> {
+        None
+    }
+
     /// Index of the group owning particle `index`, if any.
     ///
     /// Groups occupy disjoint, ascending, contiguous particle ranges, so this is a binary search.

@@ -13,6 +13,7 @@
 mod constants;
 mod evaluator;
 mod glob;
+pub(crate) mod kind_log;
 mod parser;
 mod token;
 
@@ -68,6 +69,26 @@ pub trait Target: sealed::Sealed + std::fmt::Debug + Clone {
 
     #[doc(hidden)]
     fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<Self::Index>;
+
+    /// Bring `indices`, resolved before the kinds of atoms `changed` were altered, up to date.
+    #[doc(hidden)]
+    fn patch(
+        context: &impl crate::ObserveContext,
+        selection: &Selection,
+        indices: &mut Vec<Self::Index>,
+        changed: &[usize],
+    );
+}
+
+/// Insert or remove `index` in the sorted `indices` so its membership is `selected`.
+fn set_membership<I: Ord>(indices: &mut Vec<I>, index: I, selected: bool) {
+    match (indices.binary_search(&index), selected) {
+        (Err(at), true) => indices.insert(at, index),
+        (Ok(at), false) => {
+            indices.remove(at);
+        }
+        _ => {}
+    }
 }
 
 /// Resolves to the absolute indices of matching atoms.
@@ -87,6 +108,22 @@ impl Target for Atoms {
             .map(AbsIndex::new)
             .collect()
     }
+
+    fn patch(
+        context: &impl crate::ObserveContext,
+        selection: &Selection,
+        indices: &mut Vec<AbsIndex>,
+        changed: &[usize],
+    ) {
+        for &atom in changed {
+            // An atom outside any group, or inactive, is never selected; its kind is irrelevant.
+            let selected = context.group_of_particle(atom).is_some_and(|group_index| {
+                let group = &context.groups()[group_index];
+                group.iter_active().contains(&atom) && selection.atom_matches(context, group, atom)
+            });
+            set_membership(indices, AbsIndex::new(atom), selected);
+        }
+    }
 }
 
 impl Target for Groups {
@@ -97,6 +134,26 @@ impl Target for Groups {
             .into_iter()
             .map(GroupIndex::new)
             .collect()
+    }
+
+    fn patch(
+        context: &impl crate::ObserveContext,
+        selection: &Selection,
+        indices: &mut Vec<GroupIndex>,
+        changed: &[usize],
+    ) {
+        // Each group once: a burst inside one large molecule would otherwise re-scan it per atom.
+        let mut touched: Vec<usize> = changed
+            .iter()
+            .filter_map(|&atom| context.group_of_particle(atom))
+            .collect();
+        touched.sort_unstable();
+        touched.dedup();
+        for group_index in touched {
+            // Another atom may still hold the group in, so the whole group is re-evaluated.
+            let selected = selection.group_matches(context, &context.groups()[group_index]);
+            set_membership(indices, GroupIndex::new(group_index), selected);
+        }
     }
 }
 
@@ -112,6 +169,9 @@ impl Target for Groups {
 /// `position()`, which indexes the particle array by `usize`, is a type error: `GroupIndex` has no
 /// conversion to `usize` other than the explicit `get()`, so reaching into the wrong array is a
 /// visible act rather than a silent one. See `resolved_group_indices_address_the_group_array`.
+///
+/// A cache must follow one context: after a kind swap it patches itself from that context's
+/// change log, which says nothing about a clone that has since diverged.
 #[derive(Debug, Clone)]
 pub struct CachedSelection<T: Target> {
     selection: Selection,
@@ -162,10 +222,19 @@ impl<T: Target> CachedSelection<T> {
         context: &impl crate::ObserveContext,
     ) -> (&Selection, &[T::Index]) {
         let generation = self.selection.generation(context);
-        if self.generation != Some(generation) {
-            self.indices = T::resolve(context, &self.selection);
-            self.generation = Some(generation);
+        match self.generation {
+            Some(cached) if cached == generation => {}
+            // Same composition, and the context knows which atoms changed kind since: a titration
+            // swap then costs a few atom matches instead of a pass over the whole system.
+            Some(cached) if cached.groups == generation.groups => {
+                match context.atom_kind_changes_since(cached.atom_kinds) {
+                    Some(changed) => T::patch(context, &self.selection, &mut self.indices, changed),
+                    None => self.indices = T::resolve(context, &self.selection),
+                }
+            }
+            _ => self.indices = T::resolve(context, &self.selection),
         }
+        self.generation = Some(generation);
         (&self.selection, &self.indices)
     }
 }
@@ -202,6 +271,15 @@ impl ComSelection {
     }
 }
 
+/// The current groups with every particle activated, as if all reservoirs were full.
+fn fully_populated(context: &impl crate::ObserveContext) -> anyhow::Result<Vec<Group>> {
+    let mut groups = context.groups().to_vec();
+    for group in &mut groups {
+        group.resize(GroupSize::Full)?;
+    }
+    Ok(groups)
+}
+
 /// Find a group the selection could match but the caller cannot handle.
 ///
 /// An analysis usually works only on molecules carrying some property — a mass centre, say, or a
@@ -218,10 +296,7 @@ pub(crate) fn first_unsupported_group(
     selection: &Selection,
     supported: impl Fn(&MoleculeKind) -> bool,
 ) -> anyhow::Result<Option<GroupIndex>> {
-    let mut groups = context.groups().to_vec();
-    for group in &mut groups {
-        group.resize(GroupSize::Full)?;
-    }
+    let groups = fully_populated(context)?;
     let topology = context.topology_ref();
     let kinds = topology.moleculekinds();
     Ok(selection
@@ -277,6 +352,47 @@ impl Selection {
             source: input.to_string(),
             expr,
         })
+    }
+
+    /// Whether this selection could match anything during a run.
+    ///
+    /// Checked against fully populated groups, so a grand-canonical reservoir that starts empty
+    /// counts. A selection on atom identity is also tried with every atom kind in the topology,
+    /// since a titration or speciation swap may produce any of them; an atom's match depends only
+    /// on its own kind, so one kind at a time for all atoms is exact. Over-approximates only in
+    /// assuming every kind is reachable.
+    pub(crate) fn can_ever_match(&self, context: &impl crate::ObserveContext) -> bool {
+        // A group that cannot be filled is no evidence either way; stay conservative.
+        let Ok(groups) = fully_populated(context) else {
+            return true;
+        };
+        let topology = context.topology_ref();
+        let matches_with = |kind: &dyn Fn(usize) -> crate::group::AtomKindId| {
+            groups
+                .iter()
+                .any(|group| evaluator::group_matches(&self.expr, topology, group, kind))
+        };
+        if self.depends_on_atom_kind {
+            (0..topology.atomkinds().len())
+                .any(|kind| matches_with(&|_| crate::group::AtomKindId::new(kind)))
+        } else {
+            matches_with(&|i| context.atom_kind(i))
+        }
+    }
+
+    fn atom_matches(
+        &self,
+        context: &impl crate::ObserveContext,
+        group: &Group,
+        atom: usize,
+    ) -> bool {
+        let topology = context.topology_ref();
+        evaluator::atom_matches(&self.expr, topology, group, atom, &|i| context.atom_kind(i))
+    }
+
+    fn group_matches(&self, context: &impl crate::ObserveContext, group: &Group) -> bool {
+        let topology = context.topology_ref();
+        evaluator::group_matches(&self.expr, topology, group, &|i| context.atom_kind(i))
     }
 
     /// Get the original source string.

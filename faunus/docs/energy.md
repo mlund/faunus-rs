@@ -634,6 +634,14 @@ When `use_com` is `true`, the expression is evaluated once per matching group at
 center position, with `q` set to the net group charge.
 When `false` (default), the expression is evaluated at each matching atom position.
 
+The selection follows the system as it changes. Under titration, `atomtype HIS` gains and
+loses atoms as residues are deprotonated and protonated, and a molecule selection follows
+grand-canonical insertions and deletions.
+A selection that matches nothing at the start is reported at the info level
+when titration or insertion could still populate it.
+If no atom type or molecule in the topology can ever match it, as with a misspelled name,
+a warning says that the energy will always be zero.
+
 ---
 
 ## Custom Pair Potential (COM-COM)

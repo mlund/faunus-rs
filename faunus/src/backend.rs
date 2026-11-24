@@ -17,6 +17,7 @@ use crate::{
     Context, Group, ObserveContext, Point, UnitQuaternion, WithSimulationCell, WithTopology,
 };
 
+use crate::selection::kind_log::AtomKindLog;
 use rand::Rng;
 use serde::Serialize;
 
@@ -70,9 +71,10 @@ pub struct Backend {
     /// Contiguous atom type array (u32 for SIMD gather)
     #[serde(skip)]
     atom_kinds: Vec<u32>,
-    /// Bumped on every atom-kind change, so selections matching on atom identity re-resolve.
+    /// Counts atom-kind changes and which atoms recent ones touched, so selections matching on
+    /// atom identity can re-evaluate just those atoms.
     #[serde(skip)]
-    atom_kinds_generation: u64,
+    atom_kind_log: AtomKindLog,
     /// Bumped on every coordinate change, so state derived from positions can tell it went stale.
     ///
     /// Bumped generously via [`Self::touch_positions`]: an extra bump costs a consumer one rebuild,
@@ -262,7 +264,7 @@ impl Backend {
             y: Vec::new(),
             z: Vec::new(),
             atom_kinds: Vec::new(),
-            atom_kinds_generation: 0,
+            atom_kind_log: AtomKindLog::default(),
             positions_generation: 0,
             groups: Vec::new(),
             group_lists,
@@ -584,7 +586,11 @@ impl GroupCollection for Backend {
     }
 
     fn atom_kinds_generation(&self) -> u64 {
-        self.atom_kinds_generation
+        self.atom_kind_log.generation()
+    }
+
+    fn atom_kind_changes_since(&self, generation: u64) -> Option<&[usize]> {
+        self.atom_kind_log.since(generation)
     }
 
     fn num_particles(&self) -> usize {
@@ -636,7 +642,7 @@ impl GroupCollectionMut for Backend {
             return; // a no-op must not invalidate any selection cache
         }
         self.atom_kinds[index] = atom_id as u32;
-        self.atom_kinds_generation += 1;
+        self.atom_kind_log.record(index);
     }
 
     fn swap_particles(&mut self, i: usize, j: usize) {
@@ -646,7 +652,8 @@ impl GroupCollectionMut for Backend {
         if self.atom_kinds[i] != self.atom_kinds[j] {
             // Which index holds which kind changed, so kind-based selections are stale.
             self.atom_kinds.swap(i, j);
-            self.atom_kinds_generation += 1;
+            self.atom_kind_log.record(i);
+            self.atom_kind_log.record(j);
         }
         self.update_cell_list_particles(&[i, j]);
     }
@@ -1073,7 +1080,7 @@ impl Context for Backend {
                 self.atom_kinds[i] = kind;
                 // Undoing a swap is itself a kind change; selection caches must see it. Skipped
                 // when nothing changed so a rejected translate never invalidates them.
-                self.atom_kinds_generation += 1;
+                self.atom_kind_log.record(i);
             }
         }
         // Restored unconditionally: a group that had no geometry before the move must not keep the
@@ -2027,6 +2034,109 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
                 c.resize_group(1, GroupSize::Empty).unwrap();
             });
         }
+    }
+
+    /// Invariant: a cache that lives through any sequence of kind changes, swaps, rejected moves
+    /// and resizes agrees with a full resolve after each step. Bursts longer than the kind log
+    /// force the fallback path.
+    #[test]
+    fn cached_selection_survives_a_random_walk() {
+        use rand::{Rng, SeedableRng};
+        let sources = [
+            "all",
+            "atomtype A",
+            "atomtype B",
+            "molecule DIMER and atomtype A",
+            "not atomtype B",
+        ];
+        let mut context = backend();
+        let mut caches: Vec<_> = sources
+            .iter()
+            .map(|source| {
+                let selection = Selection::parse(source).unwrap();
+                (
+                    selection.clone(),
+                    CachedSelection::atoms(selection.clone()),
+                    CachedSelection::groups(selection),
+                )
+            })
+            .collect();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(179);
+        let n = context.num_particles();
+        let mutate = |c: &mut Backend, rng: &mut rand::rngs::StdRng| match rng.gen_range(0..4) {
+            0 => c.set_atom_kind(rng.gen_range(0..n), AtomKindId::new(rng.gen_range(0..2))),
+            1 => c.swap_particles(rng.gen_range(0..n), rng.gen_range(0..n)),
+            2 => {
+                c.set_atom_kind_unchecked(rng.gen_range(0..n), AtomKindId::new(rng.gen_range(0..2)))
+            }
+            _ => {
+                let size =
+                    [GroupSize::Full, GroupSize::Partial(1), GroupSize::Empty][rng.gen_range(0..3)];
+                c.resize_group(rng.gen_range(0..2), size).unwrap();
+            }
+        };
+        for step in 0..2000 {
+            let burst = if step % 100 == 99 {
+                80
+            } else {
+                rng.gen_range(1..4)
+            };
+            let reject = rng.gen_bool(0.5);
+            if reject {
+                context.save_system_backup();
+            }
+            for _ in 0..burst {
+                mutate(&mut context, &mut rng);
+            }
+            if reject {
+                // A trial state is observed before the reject, as the energy of a move would be.
+                for (_, atoms, groups) in &mut caches {
+                    atoms.resolve(&context);
+                    groups.resolve(&context);
+                }
+                context.undo().unwrap();
+            }
+            for (selection, atoms, groups) in &mut caches {
+                assert_eq!(
+                    atoms.resolve(&context).raw(),
+                    context.resolve_atoms(selection),
+                    "atoms stale for '{selection}' at step {step}"
+                );
+                assert_eq!(
+                    groups.resolve(&context).raw(),
+                    context.resolve_groups(selection),
+                    "groups stale for '{selection}' at step {step}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn can_ever_match_sees_past_the_current_state() {
+        let mut context = backend();
+        for group in 0..2 {
+            context.resize_group(group, GroupSize::Empty).unwrap();
+        }
+        context.set_atom_kind(1, AtomKindId::new(0));
+        context.set_atom_kind(3, AtomKindId::new(0));
+        let can = |source: &str| Selection::parse(source).unwrap().can_ever_match(&context);
+        assert!(
+            can("molecule DIMER"),
+            "an emptied molecule can be reinserted"
+        );
+        assert!(
+            can("atomtype B"),
+            "a swap can bring back a kind no atom has now"
+        );
+        assert!(
+            !can("atomtype NOPE"),
+            "a typo names no kind in the topology"
+        );
+        assert!(!can("molecule NOPE"), "no group can ever hold it");
+        assert!(
+            !can("molecule NOPE and atomtype A"),
+            "a kind cannot rescue the wrong molecule"
+        );
     }
 
     #[test]
