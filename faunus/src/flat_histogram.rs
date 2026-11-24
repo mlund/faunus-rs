@@ -252,13 +252,16 @@ impl FlatHistogramState {
     /// Write free energy surface to CSV (dispatches on grid dimensionality).
     pub fn write_free_energy(&self, path: &Path) -> Result<()> {
         use crate::auxiliary::ColumnWriter;
-        let ln_g_min = self.ln_g.iter().copied().fold(f64::INFINITY, f64::min);
+        // The bias +kT ln g flattens sampling only when ln g = ln P + c = −F/kT + c, so
+        // F/kT = max(ln g) − ln g, zero at the most probable bin.
+        let ln_g_max = self.ln_g.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let free_energy = |bin: usize| ln_g_max - self.ln_g[bin];
         match &self.dim {
             GridDim::One { n, min, width } => {
                 let mut w = ColumnWriter::open(path, &["cv", "free_energy_kT"])?;
                 for i in 0..*n {
                     let cv = min + (i as f64 + 0.5) * width;
-                    let fe = self.ln_g[i] - ln_g_min;
+                    let fe = free_energy(i);
                     w.write_row(&[&format!("{cv:.4}"), &format!("{fe:.6}")])?;
                 }
             }
@@ -268,7 +271,7 @@ impl FlatHistogramState {
                     let cv1 = min[0] + (i0 as f64 + 0.5) * width[0];
                     for i1 in 0..n[1] {
                         let cv2 = min[1] + (i1 as f64 + 0.5) * width[1];
-                        let fe = self.ln_g[i0 * n[1] + i1] - ln_g_min;
+                        let fe = free_energy(i0 * n[1] + i1);
                         w.write_row(&[
                             &format!("{cv1:.4}"),
                             &format!("{cv2:.4}"),
@@ -351,6 +354,32 @@ mod tests {
         assert_eq!(state.bin_index(&[2.5, 0.5]), Some(2));
         assert_eq!(state.bin_index(&[2.5, 3.5]), Some(3));
         assert_eq!(state.bin_index(&[4.0, 0.5]), None);
+    }
+
+    /// The most visited bin is the most probable, so it has the lowest free energy:
+    /// F/kT = max(ln g) − ln g, not ln g − min(ln g).
+    #[test]
+    fn free_energy_is_lowest_where_ln_g_is_highest() {
+        let mut state = FlatHistogramState::new(
+            GridDim::new_1d(0.0, 3.0, 1.0).unwrap(),
+            0.8,
+            10,
+            1e-6,
+            1.0,
+            1,
+        );
+        state.update(1);
+        state.update(1); // ln g = [0, 2, 0]
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("free_energy.csv");
+        state.write_free_energy(&path).unwrap();
+        let free_energy: Vec<f64> = std::fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .skip(1)
+            .map(|line| line.split(',').nth(1).unwrap().trim().parse().unwrap())
+            .collect();
+        assert_eq!(free_energy, vec![2.0, 0.0, 2.0]);
     }
 
     #[test]

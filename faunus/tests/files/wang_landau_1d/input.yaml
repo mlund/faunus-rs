@@ -1,0 +1,54 @@
+# Particle in a linear external potential U = f·x: F(x)/kT = f·x/kT, same system as umbrella_1d.
+# Umbrella-sampling regression: one particle in a linear 1-D external field U(x) = force·x.
+#
+# With no pair interactions the equilibrium density is ρ(x) ∝ exp(−U/kT), so the
+# overlap-ratio–stitched PMF must recover F(x) = force·x + const — the input potential
+# itself. This makes the reference verifiable by hand: pmf_kT is linear in x with slope
+# force/kT ≈ 1/2.494 ≈ 0.40 per Å at 300 K.
+#
+# Window geometry keeps `spacing` and `width` as integer multiples of `resolution` so the
+# window→grid bin mapping is exact, and adjacent windows overlap by half a width so the
+# overlap fractions are well sampled.
+atoms:
+  - {name: A, mass: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [A]
+    has_com: true
+
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy:
+    - !CustomExternal
+        selection: "atomtype A"
+        function: "force * x"
+        constants: {force: 1.0}
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+
+analysis:
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  steps: 40000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: MOL, max_displacement: 3.0, repeat: 1}
+
+wang_landau:
+  coordinate:
+    property: atom_position
+    selection: "atomtype A"
+    projection: x
+    range: [-9.0, 9.0]
+    resolution: 0.5
+  min_ln_f: 1.0e-4
+  steps_per_check: 2000

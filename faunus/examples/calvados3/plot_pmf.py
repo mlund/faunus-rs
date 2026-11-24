@@ -20,7 +20,7 @@ if os.path.exists("pmf.csv"):
 # Wang-Landau
 if False and os.path.exists("pmf_wl.csv"):
     wl = np.genfromtxt("pmf_wl.csv", delimiter=",", names=True)
-    fe = -wl["free_energy_kT"]
+    fe = wl["free_energy_kT"].copy()
     fe -= fe[-1]
     ax.plot(wl["cv"], fe, "C1-", lw=1.5, label="Wang-Landau")
 

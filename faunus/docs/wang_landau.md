@@ -65,7 +65,7 @@ resumes from the last checkpoint.
 
 ## Output
 
-The free energy surface is written to the output file in CSV format.
+The free energy surface $F/k_BT = \max(\ln g) - \ln g$ is written in CSV format; its minimum is 0.
 
 1D (2 columns):
 ```
