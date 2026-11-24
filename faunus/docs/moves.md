@@ -99,6 +99,7 @@ If `atom` is specified, only atoms of that type are selected.
 ```yaml
 - !TranslateAtom { max_displacement: 0.1, weight: 1.0 }
 - !TranslateAtom { molecule: Water, atom: O, max_displacement: 0.2, weight: 1.0, repeat: 5 }
+- !TranslateAtom { molecule: Lipid, atom: HEAD, max_displacement: 1.0, weight: 1.0, directions: xy }
 ```
 
 Key            | Required | Default | Description
@@ -108,6 +109,7 @@ Key            | Required | Default | Description
 `molecule`     | no       |         | Restrict to this molecule type
 `atom`         | no       |         | Restrict to this atom type
 `repeat`       | no       | 1       | Repetitions per selection
+`directions`   | no       | `xyz`   | Active directions (`x`, `y`, `z`, `xy`, `xz`, `yz`, `xyz`)
 `preferential` | no       |         | Preferential sampling settings (see below)
 
 ### Preferential Sampling

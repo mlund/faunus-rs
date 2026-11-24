@@ -99,15 +99,23 @@ impl TranslateMolecule {
 impl<T: ObserveContext> MoveProposal<T> for TranslateMolecule {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = random_group(context, rng, self.molecule_id)?;
-        let displacement = self
-            .directions
-            .project(random_unit_vector(rng) * random_displacement(rng, self.max_displacement));
+        let displacement = trial_displacement(self.directions, self.max_displacement, rng);
         Some(ProposedMove::translate_group(group_index, displacement))
     }
 
     fn to_yaml(&self) -> Option<yaml_serde::Value> {
         tagged_yaml("TranslateMolecule", self)
     }
+}
+
+/// A random displacement of at most `max_displacement`, isotropic before projection onto
+/// `directions`.
+fn trial_displacement(
+    directions: crate::axes::Axes,
+    max_displacement: f64,
+    rng: &mut dyn RngCore,
+) -> Point {
+    directions.project(random_unit_vector(rng) * random_displacement(rng, max_displacement))
 }
 
 /// Move for translating a random atom.
@@ -155,6 +163,9 @@ pub struct TranslateAtom {
     /// Optional preferential sampling bias toward a reference molecule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     preferential: Option<PreferentialSampling>,
+    /// Move directions
+    #[serde(default)]
+    directions: crate::axes::Axes,
 }
 
 // TODO different default option might be better (we want any group that is not empty)
@@ -186,6 +197,7 @@ impl TranslateAtom {
             repeat,
             select_molecule_ids: GroupSelection::Size(GroupSize::Full),
             preferential: None,
+            directions: crate::axes::Axes::default(),
         }
     }
 
@@ -203,11 +215,6 @@ impl TranslateAtom {
                 .copied()
                 .choose(rng),
         }
-    }
-
-    /// A random displacement of at most `max_displacement`, isotropic in direction.
-    fn trial_displacement(&self, rng: &mut dyn RngCore) -> Point {
-        random_unit_vector(rng) * random_displacement(rng, self.max_displacement)
     }
 
     /// The groups this move may draw from.
@@ -320,7 +327,7 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
         let (group, absolute_atom, displacement) = if self.preferential.is_some() {
             // Drawn before the pick: the acceptance correction of eqn 9.44 needs both endpoints
             // of the move, and the displacement does not depend on which atom is chosen.
-            let displacement = self.trial_displacement(rng);
+            let displacement = trial_displacement(self.directions, self.max_displacement, rng);
             let pref = self.preferential.as_mut().unwrap();
             let atom = pref.propose(context, &displacement, rng)?;
             // The atom is picked from the whole eligible set, so its group follows from it.
@@ -337,7 +344,11 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
             // empty system fails fast.
             const MAX_RETRIES: usize = 16;
             let (group, atom) = (0..MAX_RETRIES).find_map(|_| self.get_group_atom(context, rng))?;
-            (group, atom, self.trial_displacement(rng))
+            (
+                group,
+                atom,
+                trial_displacement(self.directions, self.max_displacement, rng),
+            )
         };
 
         let absolute_atom = AbsIndex::new(absolute_atom);
@@ -565,6 +576,31 @@ mod tests {
         assert_eq!(propagator.max_displacement, 0.5);
         assert_eq!(propagator.weight, 4.0);
         assert_eq!(propagator.repeat, 1);
+    }
+
+    /// `directions: xy` keeps atoms in their plane, e.g. lipid heads on a wall.
+    #[test]
+    fn atom_displacement_respects_directions() {
+        use crate::transform::Transform;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let context = Backend::new(
+            "tests/files/topology_pass.yaml",
+            Some(Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+        let mut translate: TranslateAtom =
+            yaml_serde::from_str("{ max_displacement: 1.0, directions: xy }").unwrap();
+        translate.finalize(&context).unwrap();
+
+        for _ in 0..20 {
+            let proposed = translate.propose_move(&context, &mut rng).unwrap();
+            let Transform::PartialTranslate(shift, _) = proposed.transform() else {
+                panic!("expected a partial translation");
+            };
+            assert_eq!(shift.z, 0.0);
+            assert_ne!(shift.x, 0.0);
+        }
     }
 
     /// A `molecule`/`atom` filter must be honoured by every proposal it selects, not just the
