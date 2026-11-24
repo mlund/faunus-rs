@@ -1429,7 +1429,7 @@ The molecule must have exactly one atom type and no bonds.</p>
 </tr>
 <tr>
 <td><code>!FromFile</code></td>
-<td><code>structure.xyz</code></td>
+<td><code>structure.xyz</code> or <code>{file: structure.xyz, origin: center}</code></td>
 <td>Read all positions from file</td>
 </tr>
 <tr>
@@ -1449,6 +1449,9 @@ The molecule must have exactly one atom type and no bonds.</p>
 </tr>
 </tbody>
 </table>
+<p><code>!FromFile</code> reads coordinates with the origin at a box corner (<code>origin: corner</code>, the default, as in
+trajectory output) and shifts them by −½ box; use <code>origin: center</code> for a box-centred file. A position
+beyond a wall is an error; an overhang across a periodic boundary is kept.</p>
 <p>The <code>directions</code> field controls which axes are randomized: <code>xyz</code> (default), <code>xy</code>, <code>xz</code>, <code>yz</code>, <code>x</code>, <code>y</code>, or <code>z</code>.
 <code>!RandomAtomPos</code> places every atom independently, discarding any conformation; it is meant for atomic
 species (salt, ions). A multi-atom kind that carries geometry — one that tracks a center of mass or declares

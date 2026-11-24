@@ -1619,7 +1619,8 @@ duplicates are automatically excluded.</p>
 <hr />
 <h2 id="trajectory">Trajectory<a class="headerlink" href="#trajectory" title="Permanent link">&para;</a></h2>
 <p>Writes particle coordinates to a trajectory file at each sampled step.
-The format is auto-detected from the file extension (<code>.xyz</code> or <code>.xtc</code>).</p>
+The format is auto-detected from the file extension (<code>.xyz</code> or <code>.xtc</code>).
+Coordinates have their origin at a box corner (positions + ½ box), as <code>!FromFile</code> expects.</p>
 <p>On finalization a companion PSF topology file and a VMD scene script are
 written alongside the trajectory. The PSF contains atoms, bonds, angles,
 and dihedrals; the Tcl script loads the PSF and trajectory, sets VDW radii
