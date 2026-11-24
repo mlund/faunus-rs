@@ -851,7 +851,7 @@ Adjacent windows must overlap (<code>spacing &lt; width</code>) for stitching.</
 <p>During the drive phase a harmonic bias <span class="arithmatex">\(\frac{1}{2}k(x - c_i)^2\)</span> steers each walker toward the
 center of its window. The drive ends as soon as the collective variable enters the window. If
 <code>propagate.steps</code> steps pass without the walker arriving, the run stops with an error;
-strengthen <code>force_constant</code> or allow more sweeps.</p>
+strengthen <code>force_constant</code> or allow more steps.</p>
 <h2 id="per-window-lifecycle">Per-window lifecycle<a class="headerlink" href="#per-window-lifecycle" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Drive — the harmonic bias pulls the walker into its target window. Skipped on restart if a
@@ -900,7 +900,7 @@ windows combine to
 <span class="arithmatex">\(\sigma = RT / \sqrt{\sum_j N_j}\)</span>,
 which shrinks as sampling accumulates.</p>
 <p>Two effects make <code>stderr_kT</code> a lower bound on the true uncertainty. It assumes statistically
-independent samples, whereas successive Monte Carlo sweeps are correlated; scale it by <span class="arithmatex">\(\sqrt{g}\)</span>,
+independent samples, whereas successive Monte Carlo steps are correlated; scale it by <span class="arithmatex">\(\sqrt{g}\)</span>,
 the statistical inefficiency of the collective variable, for a rigorous bound. It also measures a
 single bin in isolation. The free-energy offset between adjacent windows is itself estimated from
 the overlap fractions, and these offsets accumulate along the reaction coordinate. That

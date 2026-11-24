@@ -945,7 +945,7 @@
 <td><code>steps</code></td>
 <td>no</td>
 <td>1</td>
-<td>Number of propagate steps (the outer loop)</td>
+<td>Number of steps</td>
 </tr>
 <tr>
 <td><code>collections</code></td>
@@ -963,12 +963,39 @@
 <td><code>criterion</code></td>
 <td>no</td>
 <td><code>MetropolisHastings</code></td>
-<td>Acceptance criterion (<code>Metropolis</code> or <code>Minimize</code>)</td>
+<td><code>MetropolisHastings</code> (alias <code>Metropolis</code>) or <code>Minimize</code></td>
 </tr>
 </tbody>
 </table>
-<p>Each propagate step executes every collection in order; after all collections
-have run, one step is complete and the step counter advances.</p>
+<h3 id="steps-cycles-and-trial-moves">Steps, cycles and trial moves<a class="headerlink" href="#steps-cycles-and-trial-moves" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>step</td>
+<td>One pass over all collections; <code>steps</code> per run</td>
+</tr>
+<tr>
+<td>cycle</td>
+<td>One draw from a collection: one move (<code>!Stochastic</code>) or all (<code>!Deterministic</code>); <code>cycles</code> per step</td>
+</tr>
+<tr>
+<td>trial move</td>
+<td>One accepted-or-rejected attempt; <code>repeat</code> per draw</td>
+</tr>
+<tr>
+<td>sweep</td>
+<td>Gibbs ensemble only: <code>intra_steps</code> steps plus the inter-box moves</td>
+</tr>
+</tbody>
+</table>
+<p>Analysis <code>frequency</code>, the state-file step count and <code>step</code> output columns all count steps.
+The count continues across restarts.</p>
 <h2 id="collections">Collections<a class="headerlink" href="#collections" title="Permanent link">&para;</a></h2>
 <p>A collection groups moves together and controls how they are selected.
 Two types are available:</p>
@@ -976,8 +1003,7 @@ Two types are available:</p>
 <li><code>!Stochastic</code> — each cycle draws <em>one</em> move at random, with probability
   proportional to <code>weight</code>. This is the normal Monte Carlo sampling mode.</li>
 <li><code>!Deterministic</code> — each cycle executes <em>all</em> moves in order.
-  Useful for e.g. hybrid MC/MD schemes. The <code>weight</code> field is unused here but
-  still required by the move schema.</li>
+  Useful for e.g. hybrid MC/MD schemes. <code>weight</code> is ignored.</li>
 </ul>
 <table>
 <thead>
@@ -993,7 +1019,7 @@ Two types are available:</p>
 <td><code>cycles</code></td>
 <td>no</td>
 <td>1</td>
-<td>How many times the collection runs per propagate step</td>
+<td>Cycles per step</td>
 </tr>
 <tr>
 <td><code>moves</code></td>
@@ -1015,11 +1041,11 @@ Two types are available:</p>
 <tbody>
 <tr>
 <td><code>weight</code></td>
-<td>Selection weight (only meaningful inside <code>!Stochastic</code> collections)</td>
+<td>Selection weight, only used in <code>!Stochastic</code> collections (default 1)</td>
 </tr>
 <tr>
 <td><code>repeat</code></td>
-<td>How many trial moves to attempt <em>each time the move is selected</em> (default 1)</td>
+<td>Trial moves each time the move is drawn (default 1)</td>
 </tr>
 <tr>
 <td><code>max_displacement</code></td>
@@ -1031,12 +1057,8 @@ Two types are available:</p>
 </tr>
 </tbody>
 </table>
-<p>The collection's <code>cycles</code> and the move's <code>repeat</code> nest: <code>cycles</code> controls how
-often moves are drawn from the collection each propagate step, and the move's
-<code>repeat</code> controls how many trials are performed per draw. For example, a
-stochastic collection with <code>cycles: 100</code> containing a move with <code>repeat: 5</code>
-will attempt that move up to 500 times per step (depending on how often it is
-drawn).</p>
+<p>Example: <code>cycles: 100</code>, two equally weighted moves, one with <code>repeat: 5</code> → on average
+100 × ½ × 5 = 250 trials of that move per step.</p>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hardware</span>
@@ -1085,15 +1107,15 @@ with magnitude uniformly sampled in <span class="arithmatex">\([-\Delta r, +\Del
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 <tr>
 <td><code>directions</code></td>
@@ -1130,8 +1152,8 @@ If <code>atom</code> is specified, only atoms of that type are selected.</p>
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
@@ -1150,7 +1172,7 @@ If <code>atom</code> is specified, only atoms of that type are selected.</p>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 <tr>
 <td><code>directions</code></td>
@@ -1282,15 +1304,15 @@ Atomic molecules have no orientation to sample and are rejected.</p>
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 </tbody>
 </table>
@@ -1329,15 +1351,15 @@ than half the box length turn correctly.</p>
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 </tbody>
 </table>
@@ -1382,15 +1404,15 @@ potentials, <code>PivotMove</code> alone is typically sufficient.</p>
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 </tbody>
 </table>
@@ -1465,7 +1487,7 @@ cluster that spans the periodic boundary still rotates correctly.</p>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 </tbody>
 </table>
@@ -1518,8 +1540,8 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 </tr>
 <tr>
 <td><code>weight</code></td>
-<td>yes</td>
-<td></td>
+<td>no</td>
+<td>1</td>
 <td>Selection weight</td>
 </tr>
 <tr>
@@ -1532,7 +1554,7 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 </tbody>
 </table>
@@ -1780,7 +1802,7 @@ the electrostatic excess chemical potential negative, so the mean activity coeff
 <td><code>repeat</code></td>
 <td>no</td>
 <td>1</td>
-<td>Repetitions per selection</td>
+<td>Trial moves per draw</td>
 </tr>
 <tr>
 <td><code>temperature</code></td>
@@ -1858,7 +1880,7 @@ an explicit interface.
 When <code>propagate.gibbs</code> is present, faunus clones the system into two boxes
 and alternates between:</p>
 <ol>
-<li>Intra-box MC — each box runs <code>intra_steps</code> propagation cycles in parallel
+<li>Intra-box MC — each box runs <code>intra_steps</code> steps in parallel
    (using the <code>collections</code> defined above).</li>
 <li>Inter-box moves — volume exchange and particle transfer between the two boxes.</li>
 </ol>
@@ -1892,7 +1914,7 @@ in the <code>blocks</code> section, e.g. <code>{ molecule: LJ, N: 600, active: 3
 <td><code>intra_steps</code></td>
 <td>yes</td>
 <td></td>
-<td>Intra-box propagation cycles between inter-box moves</td>
+<td>Steps per box between inter-box moves</td>
 </tr>
 <tr>
 <td><code>moves</code></td>
@@ -1996,8 +2018,8 @@ Molecules are treated as rigid bodies with translational and rotational degrees 
 integrated with per-body friction and stochastic forces at the target temperature.
 Requires the <code>gpu</code> cargo feature (<code>cargo run --features gpu</code>).</p>
 <p>Langevin dynamics is placed as a collection entry alongside Monte Carlo moves,
-enabling hybrid MC/LD schemes where MC sweeps alternate with LD blocks within
-each propagation cycle. On each MC→LD transition, atom positions, centers of mass,
+enabling hybrid MC/LD schemes where MC collections alternate with LD blocks within
+each step. On each MC→LD transition, atom positions, centers of mass,
 and rigid-body orientations are uploaded to the compute device; after the LD block,
 updated positions and orientations are downloaded back.</p>
 <p>Pair interactions are evaluated on-device using cubic spline interpolation of the
@@ -2096,7 +2118,7 @@ thermostat independently to each angular velocity component:</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LangevinDynamics</span>
 <span class="w">      </span><span class="nt">timestep</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">      </span><span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
-<span class="w">      </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">      </span><span class="nt">timesteps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
 <span class="w">      </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
 </code></pre></div>
 <h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
@@ -2123,10 +2145,10 @@ thermostat independently to each angular velocity component:</p>
 <td>Friction coefficient (1/ps)</td>
 </tr>
 <tr>
-<td><code>steps</code></td>
+<td><code>timesteps</code></td>
 <td>yes</td>
 <td></td>
-<td>Number of LD steps per block</td>
+<td>Integration timesteps per step</td>
 </tr>
 <tr>
 <td><code>temperature</code></td>
@@ -2138,7 +2160,7 @@ thermostat independently to each angular velocity component:</p>
 <td><code>cell_list_rebuild</code></td>
 <td>no</td>
 <td>20</td>
-<td>Cell list rebuild interval (steps; 0 = only at start)</td>
+<td>Cell list rebuild interval (timesteps; 0 = only at start)</td>
 </tr>
 </tbody>
 </table>
@@ -2148,7 +2170,7 @@ from the equipartition theorem:</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LangevinDynamics</span>
 <span class="w">  </span><span class="nt">timestep</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">  </span><span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
-<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">  </span><span class="nt">timesteps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
 <span class="w">  </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
 <span class="w">  </span><span class="nt">measured_temperature</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">translational</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mean</span><span class="p">:</span><span class="w"> </span><span class="nv">298.3</span><span class="p p-Indicator">,</span><span class="nt"> error</span><span class="p">:</span><span class="w"> </span><span class="nv">1.2</span><span class="p p-Indicator">}</span>
