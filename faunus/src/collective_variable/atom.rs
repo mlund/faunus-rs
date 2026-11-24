@@ -46,13 +46,8 @@ impl CvKind for AtomPosition {
         if indices.len() != 1 {
             return f64::NAN;
         }
-        let pos = GroupCollection::position(context, indices[0]);
-        match self.projection {
-            Axes::X => pos.x,
-            Axes::Y => pos.y,
-            Axes::Z => pos.z,
-            other => other.project(pos).norm(),
-        }
+        self.projection
+            .scalar_projection(GroupCollection::position(context, indices[0]))
     }
 
     fn name(&self) -> &'static str {
