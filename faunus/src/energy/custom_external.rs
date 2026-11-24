@@ -166,10 +166,18 @@ fn affected<T: ExternalTarget>(
     }
     let (selection, selected) = cache.resolve_with_selection(context);
     if selected.is_empty() && !warned_empty.replace(true) {
-        log::warn!(
-            "custom_external: selection '{selection}' matched no {} — energy will always be zero",
-            T::NOUN
-        );
+        // A titrating kind or an empty reservoir can be absent now and present later.
+        if selection.can_ever_match(context) {
+            log::info!(
+                "custom_external: selection '{selection}' currently matches no {}",
+                T::NOUN
+            );
+        } else {
+            log::warn!(
+                "custom_external: selection '{selection}' matches no {} — energy will always be zero",
+                T::NOUN
+            );
+        }
     }
     let touched = |group_index: usize| {
         let groups = context.groups();

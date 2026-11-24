@@ -234,8 +234,37 @@ impl Expr {
     }
 }
 
+/// Whether the active atom `abs_idx` of `group` matches.
+pub(super) fn atom_matches(
+    expr: &Expr,
+    topology: &Topology,
+    group: &Group,
+    abs_idx: usize,
+    get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
+) -> bool {
+    let mol_kind = topology.moleculekind(group.molecule());
+    expr.matches(&AtomContext::new(
+        abs_idx,
+        group,
+        mol_kind,
+        topology,
+        get_atom_kind(abs_idx),
+    ))
+}
+
+/// Whether any active atom of `group` matches.
+pub(super) fn group_matches(
+    expr: &Expr,
+    topology: &Topology,
+    group: &Group,
+    get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
+) -> bool {
+    group
+        .iter_active()
+        .any(|abs_idx| atom_matches(expr, topology, group, abs_idx, get_atom_kind))
+}
+
 /// Resolve an expression to absolute particle indices (sorted, deduplicated).
-///
 pub(super) fn resolve_atoms(
     expr: &Expr,
     topology: &Topology,
@@ -244,18 +273,10 @@ pub(super) fn resolve_atoms(
 ) -> Vec<usize> {
     let mut result: Vec<usize> = groups
         .iter()
-        .filter(|g| !g.is_empty())
         .flat_map(|group| {
-            let mol_kind = topology.moleculekind(group.molecule());
-            group.iter_active().filter(|&abs_idx| {
-                expr.matches(&AtomContext::new(
-                    abs_idx,
-                    group,
-                    mol_kind,
-                    topology,
-                    get_atom_kind(abs_idx),
-                ))
-            })
+            group
+                .iter_active()
+                .filter(|&abs_idx| atom_matches(expr, topology, group, abs_idx, get_atom_kind))
         })
         .collect();
 
@@ -265,7 +286,6 @@ pub(super) fn resolve_atoms(
 }
 
 /// Resolve an expression to group indices where ANY active atom matches.
-///
 pub(super) fn resolve_groups(
     expr: &Expr,
     topology: &Topology,
@@ -275,19 +295,7 @@ pub(super) fn resolve_groups(
     groups
         .iter()
         .enumerate()
-        .filter(|(_, group)| !group.is_empty())
-        .filter(|(_, group)| {
-            let mol_kind = topology.moleculekind(group.molecule());
-            group.iter_active().any(|abs_idx| {
-                expr.matches(&AtomContext::new(
-                    abs_idx,
-                    group,
-                    mol_kind,
-                    topology,
-                    get_atom_kind(abs_idx),
-                ))
-            })
-        })
+        .filter(|(_, group)| group_matches(expr, topology, group, get_atom_kind))
         .map(|(idx, _)| idx)
         .collect()
 }
