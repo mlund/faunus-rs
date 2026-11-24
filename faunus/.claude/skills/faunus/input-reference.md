@@ -83,3 +83,4 @@ cell: !Endless                                     # infinite
   moves per draw; LD `timesteps` per step. "Sweep" means Gibbs only (`intra_steps` steps + inter-box moves)
 - Analysis `!Every N` counts steps, not trial moves: with `cycles: 100`, `!Every 1` samples once per 100 cycles
 - Unknown keys are rejected (`deny_unknown_fields`): a mistyped key errors rather than being ignored
+- `!FromFile` assumes a corner-origin file (as trajectories are written); use `!FromFile {file: x.xyz, origin: center}` for a box-centred one

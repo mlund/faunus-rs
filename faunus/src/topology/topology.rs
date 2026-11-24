@@ -300,7 +300,15 @@ impl Topology {
         let mut curr_start = 0;
 
         let positions = structure
-            .map(|x| super::structure::positions_from_structure_file(&x, Some(context.cell())))
+            .map(|x| {
+                use anyhow::Context as _;
+                super::structure::positions_from_structure_file(
+                    &x,
+                    context.cell(),
+                    super::structure::Origin::Corner,
+                )
+                .context("structure file for blocks without an `insert:` policy")
+            })
             .transpose()?;
 
         // create groups

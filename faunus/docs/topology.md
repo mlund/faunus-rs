@@ -342,10 +342,14 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 | `!RandomCOM`     | `{rotate: true, min_distance: 2.0}`                  | Random center-of-mass placement                |
 | `!RandomAtomPos` | `{directions: xy}`                                   | Random position per atom (geometry-free kinds) |
 | `!FixedCOM`      | `{position: [0, 0, 0]}`                              | Place at specific position                     |
-| `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
+| `!FromFile`      | `structure.xyz` or `{file: structure.xyz, origin: center}` | Read all positions from file             |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
 | `!RandomWalk`    | `{bond_length: 3.8}`                                 | Self-avoiding walk; respects cell boundaries   |
 | `!GridCOM`       | `{rotate: true}`                                     | Simple cubic grid; cuboidal cells only         |
+
+`!FromFile` reads coordinates with the origin at a box corner (`origin: corner`, the default, as in
+trajectory output) and shifts them by −½ box; use `origin: center` for a box-centred file. A position
+beyond a wall is an error; an overhang across a periodic boundary is kept.
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.
 `!RandomAtomPos` places every atom independently, discarding any conformation; it is meant for atomic
