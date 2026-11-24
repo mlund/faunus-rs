@@ -304,7 +304,7 @@ impl Simulation {
         self.run_with_progress(&mut |_, _| {})
     }
 
-    /// As [`run`](Self::run), invoking `on_step(step, total)` after each completed cycle —
+    /// As [`run`](Self::run), invoking `on_step(step, total)` after each completed step —
     /// Monte Carlo steps for a single box, sweeps for a Gibbs ensemble.
     pub fn run_with_progress(
         &mut self,
@@ -377,7 +377,7 @@ fn build_gibbs(
     // hardcoded constant would give it the same chain for every input.
     mc1.propagation_mut().reseed(setup_rng.gen());
 
-    let max_sweeps = mc0.propagation().max_repeats() / gibbs_cfg.intra_steps.max(1);
+    let max_sweeps = mc0.propagation().max_steps() / gibbs_cfg.intra_steps.max(1);
     log::info!(
         "Gibbs ensemble: {} sweeps, {} intra-steps, {} inter-moves",
         max_sweeps,
@@ -495,7 +495,7 @@ fn run_single_box(
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
     log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
 
-    let total = mc.propagation().max_repeats();
+    let total = mc.propagation().max_steps();
     for (i, step) in mc.iter().enumerate() {
         step.map_err(run_failed)?;
         on_step(i + 1, total);

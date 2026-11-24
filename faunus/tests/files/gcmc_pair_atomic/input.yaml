@@ -45,15 +45,15 @@ system:
 analysis:
   - !Energy
     file: energy.dat
-    frequency: !Every 50
+    frequency: !Every 25
   - !CollectiveVariable
     property: count
     selection: "atomtype Na"
-    frequency: !Every 50
+    frequency: !Every 25
   - !CollectiveVariable
     property: count
     selection: "atomtype Cl"
-    frequency: !Every 50
+    frequency: !Every 25
 
 propagate:
   seed: !Fixed 42

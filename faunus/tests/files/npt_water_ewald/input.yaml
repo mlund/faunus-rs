@@ -41,8 +41,8 @@ system:
     - !Pressure {atm: 1}
 
 analysis:
-  - !CollectiveVariable {property: volume, frequency: !Every 10}
-  - !Energy {file: energy.dat, frequency: !Every 10}
+  - !CollectiveVariable {property: volume, frequency: !Every 3}
+  - !Energy {file: energy.dat, frequency: !Every 3}
 
 propagate:
   seed: !Fixed 42

@@ -112,5 +112,5 @@ propagate:
     - !LangevinDynamics
       timestep: 0.06      # ps
       friction: 5.0      # 1/ps
-      steps: 10          # LD steps per sweep
+      timesteps: 10      # integration timesteps per propagate step
       temperature: 298.15

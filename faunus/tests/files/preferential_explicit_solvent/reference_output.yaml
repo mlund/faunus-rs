@@ -93,6 +93,7 @@ propagate:
       atom: null
       molecule: solute
       max_displacement: 0.2
+      directions: xyz
       weight: 1.0
       repeat: 2
       statistics:
@@ -150,6 +151,7 @@ propagate:
           samples: 15696
         bounding_radii:
         - 1.5001553329489983
+      directions: xyz
       weight: 1.0
       repeat: 12
       statistics:

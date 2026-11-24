@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-36-g36a15bb-dirty
 medium:
   permittivity: Water
   salt: null
@@ -31,28 +31,28 @@ energy:
     thermal_energy: 2.4789570295566996
 energy_timers:
 - cell_overlap:
-    total: 2.62
-    energy: 1.88
-    update: 0.74
+    total: 3.23
+    energy: 2.27
+    update: 0.96
 - nonbonded:
-    total: 93.07
-    energy: 46.84
-    update: 46.23
+    total: 91.42
+    energy: 78.3
+    update: 13.12
 - intramolecular:
-    total: 2.38
-    energy: 1.67
-    update: 0.71
+    total: 2.96
+    energy: 2.08
+    update: 0.89
 - external_pressure:
-    total: 1.94
-    energy: 1.2
-    update: 0.74
+    total: 2.39
+    energy: 1.5
+    update: 0.89
 propagate:
   steps: 25000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 7.91232641
+    elapsed_seconds: 6.287611361
     moves:
     - !TranslateMolecule
       molecule: polymer
@@ -104,6 +104,7 @@ propagate:
       atom: null
       molecule: polymer
       max_displacement: 10.0
+      directions: xyz
       weight: 1.0
       repeat: 32
       statistics:
@@ -120,6 +121,7 @@ propagate:
       atom: null
       molecule: counterion
       max_displacement: 110.0
+      directions: xyz
       weight: 1.0
       repeat: 32
       statistics:
@@ -151,25 +153,25 @@ propagate:
 analysis:
 - collective_variable:
     property: Volume
-    num_samples: 15000
-    mean: 532598.7186052322
-    rms: 539417.840290311
+    num_samples: 12500
+    mean: 532458.0289089839
+    rms: 539293.2827571284
 - polymer_shape:
-    Rg: 6.799799257755103
-    Re: 15.909542586178187
-    ⟨Re²⟩/⟨Rg²⟩: 5.474232055618817
-    asphericity: 34.26129799988935
-    acylindricity: 5.885871239302223
-    relative_shape_anisotropy: 0.5476091141299243
-    prolateness: 0.7466189991553043
-    Cl: 0.6360919071092539
-    Cp: 0.28132401316849204
-    Cs: 0.08258407972225659
-    Sxx: 15.384349026950462
-    Sxy: -0.03441733992741648
-    Sxz: -0.06854957441269433
-    Syy: 15.430715347592674
-    Syz: -0.0496818241602561
-    Szz: 15.422205571224037
-    num_samples: 15000
-    num_groups_sampled: 120000
+    Rg: 6.7987147516055
+    Re: 15.906279063266457
+    ⟨Re²⟩/⟨Rg²⟩: 5.473732310416942
+    asphericity: 34.24237762776438
+    acylindricity: 5.887906103982593
+    relative_shape_anisotropy: 0.5474818252088792
+    prolateness: 0.7461798827374111
+    Cl: 0.6360608626783492
+    Cp: 0.2813618554155061
+    Cs: 0.08257728190613482
+    Sxx: 15.431813538449541
+    Sxy: -0.01710300479555423
+    Sxz: -0.049288630980711796
+    Syy: 15.421165145002194
+    Syz: -0.07509719010011547
+    Szz: 15.369543590246229
+    num_samples: 12500
+    num_groups_sampled: 100000

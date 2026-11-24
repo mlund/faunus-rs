@@ -1930,12 +1930,7 @@ propagate:
             let mut n_samples = 0usize;
 
             for step_num in 0..repeat {
-                let running = mc.propagate.propagate(
-                    &mut mc.context,
-                    mc.thermal_energy,
-                    &mut mc.step,
-                    &mut mc.analyses,
-                );
+                let running = mc.advance();
                 assert!(
                     running.unwrap(),
                     "Simulation ended early at step {step_num}"
@@ -2331,14 +2326,7 @@ propagate:
         let mut sums = [0.0_f64; 2];
         let mut samples = 0usize;
         for step in 0..repeat {
-            mc.propagate
-                .propagate(
-                    &mut mc.context,
-                    mc.thermal_energy,
-                    &mut mc.step,
-                    &mut mc.analyses,
-                )
-                .unwrap();
+            mc.advance().unwrap();
             if step >= equilibrate {
                 for (id, sum) in sums.iter_mut().enumerate() {
                     let (n_a, n_ha) = count_protonation(&mc.context, MoleculeId::new(id));
@@ -2590,14 +2578,7 @@ propagate:
 
         let (mut sum, mut samples) = (0.0_f64, 0usize);
         for step in 0..repeat {
-            mc.propagate
-                .propagate(
-                    &mut mc.context,
-                    mc.thermal_energy,
-                    &mut mc.step,
-                    &mut mc.analyses,
-                )
-                .unwrap();
+            mc.advance().unwrap();
             if step >= equilibrate {
                 sum += mc.context.count_active_molecules(MoleculeId::new(0)) as f64;
                 samples += 1;
@@ -2792,14 +2773,7 @@ propagate:
 
             let (mut charge_sum, mut samples) = (0.0_f64, 0usize);
             for step in 0..repeat {
-                mc.propagate
-                    .propagate(
-                        &mut mc.context,
-                        mc.thermal_energy,
-                        &mut mc.step,
-                        &mut mc.analyses,
-                    )
-                    .unwrap();
+                mc.advance().unwrap();
                 if step < equilibrate {
                     continue;
                 }
@@ -3222,12 +3196,7 @@ propagate:
 
         let (mut sum, mut sum_sq, mut samples) = (0.0_f64, 0.0_f64, 0usize);
         for _ in 0..repeat {
-            let running = mc.propagate.propagate(
-                &mut mc.context,
-                mc.thermal_energy,
-                &mut mc.step,
-                &mut mc.analyses,
-            );
+            let running = mc.advance();
             assert!(running.unwrap(), "simulation ended early");
             samples += 1;
             if samples > equilibrate {

@@ -33,7 +33,7 @@ analysis:
     atom: Na
     insertions: 20
     lambda_points: 11
-    frequency: !Every 5
+    frequency: !Every 2
     default:
       - !Coulomb { cutoff: 1000.0 }
       - !WCA { mixing: arithmetic }
@@ -41,7 +41,7 @@ analysis:
     atom: Cl
     insertions: 20
     lambda_points: 11
-    frequency: !Every 5
+    frequency: !Every 2
     default:
       - !Coulomb { cutoff: 1000.0 }
       - !WCA { mixing: arithmetic }

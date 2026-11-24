@@ -78,5 +78,8 @@ cell: !Endless                                     # infinite
 
 - Use `spline` tabulation for performance; add `bounding_spheres: true` for rigid molecules
 - Use `replace:` for pairs that fully override `default`; `append:` for pairs that extend it
-- `!Stochastic` collections for mixed molecule types; `!Deterministic` with `cycles` for sweeps
+- `!Stochastic` collections for mixed molecule types; `!Deterministic` to run every move each cycle
+- Counters: `propagate.steps` steps per run; `cycles` draws per collection per step; `repeat` trial
+  moves per draw; LD `timesteps` per step. "Sweep" means Gibbs only (`intra_steps` steps + inter-box moves)
+- Analysis `!Every N` counts steps, not trial moves: with `cycles: 100`, `!Every 1` samples once per 100 cycles
 - Unknown keys are rejected (`deny_unknown_fields`): a mistyped key errors rather than being ignored

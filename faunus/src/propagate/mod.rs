@@ -34,31 +34,27 @@ pub use moverunner::MoveRunner;
 
 #[cfg(feature = "gpu")]
 use crate::energy::EnergyChange;
-use crate::{
-    analysis::{AnalysisCollection, AnalysisCollectionExt},
-    montecarlo::AcceptanceCriterion,
-    Context,
-};
+use crate::{montecarlo::AcceptanceCriterion, Context};
 use builder::{PropagateBuilder, Seed, SelectionStrategy};
 use rand::prelude::SliceRandom;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::path::Path;
 
-/// A collection of moves with a selection strategy and repeat count.
+/// A collection of moves with a selection strategy, run `cycles` times per step.
 #[derive(Debug)]
 pub(crate) struct MoveCollection<T: Context> {
     strategy: SelectionStrategy,
-    repeat: usize,
+    cycles: usize,
     moves: Vec<MoveRunner<T>>,
     elapsed: std::time::Duration,
 }
 
 impl<T: Context> MoveCollection<T> {
-    fn new(strategy: SelectionStrategy, repeat: usize, moves: Vec<MoveRunner<T>>) -> Self {
+    fn new(strategy: SelectionStrategy, cycles: usize, moves: Vec<MoveRunner<T>>) -> Self {
         Self {
             strategy,
-            repeat,
+            cycles,
             moves,
             elapsed: std::time::Duration::default(),
         }
@@ -69,21 +65,17 @@ impl<T: Context> MoveCollection<T> {
         context: &mut T,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
-        step: &mut usize,
         rng: &mut impl Rng,
-        analyses: &mut AnalysisCollection<T>,
     ) -> anyhow::Result<()> {
-        for _ in 0..self.repeat {
+        for _ in 0..self.cycles {
             match self.strategy {
                 SelectionStrategy::Stochastic => {
                     let selected = self.moves.choose_weighted_mut(rng, |mv| mv.weight())?;
-                    selected.do_move(context, criterion, thermal_energy, step, rng)?;
-                    analyses.sample(context, *step)?;
+                    selected.do_move(context, criterion, thermal_energy, rng)?;
                 }
                 SelectionStrategy::Deterministic => {
                     for mv in self.moves.iter_mut() {
-                        mv.do_move(context, criterion, thermal_energy, step, rng)?;
-                        analyses.sample(context, *step)?;
+                        mv.do_move(context, criterion, thermal_energy, rng)?;
                     }
                 }
             }
@@ -96,8 +88,8 @@ impl<T: Context> MoveCollection<T> {
     }
 
     #[cfg(test)]
-    fn repeat(&self) -> usize {
-        self.repeat
+    fn cycles(&self) -> usize {
+        self.cycles
     }
 
     fn to_yaml(&self) -> yaml_serde::Value {
@@ -106,7 +98,7 @@ impl<T: Context> MoveCollection<T> {
             SelectionStrategy::Deterministic => "Deterministic",
         };
         let mut map = yaml_serde::Mapping::new();
-        map.insert("cycles".into(), self.repeat.into());
+        map.insert("cycles".into(), self.cycles.into());
         map.insert(
             "elapsed_seconds".into(),
             yaml_serde::Value::Number(yaml_serde::Number::from(self.elapsed.as_secs_f64())),
@@ -134,15 +126,11 @@ impl<T: Context> PropagationBlock<T> {
         context: &mut T,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
-        step: &mut usize,
         rng: &mut impl Rng,
-        analyses: &mut AnalysisCollection<T>,
     ) -> anyhow::Result<()> {
         let t0 = crate::time::Instant::now();
         let result = match self {
-            Self::MonteCarlo(mc) => {
-                mc.propagate(context, criterion, thermal_energy, step, rng, analyses)
-            }
+            Self::MonteCarlo(mc) => mc.propagate(context, criterion, thermal_energy, rng),
             #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => {
                 let energy_before = context
@@ -153,9 +141,6 @@ impl<T: Context> PropagationBlock<T> {
                     .hamiltonian()
                     .energy(context, &crate::Change::Everything);
                 ld.add_energy_change(energy_after - energy_before);
-                // Sample analyses after positions are written back to context
-                analyses.sample(context, *step)?;
-                *step += ld.steps();
                 Ok(())
             }
         };
@@ -177,12 +162,13 @@ impl<T: Context> PropagationBlock<T> {
         }
     }
 
+    /// Cycles per step of an MC block; `None` for LD blocks.
     #[cfg(test)]
-    pub(crate) fn repeat(&self) -> usize {
+    pub(crate) fn cycles(&self) -> Option<usize> {
         match self {
-            Self::MonteCarlo(mc) => mc.repeat(),
+            Self::MonteCarlo(mc) => Some(mc.cycles()),
             #[cfg(feature = "gpu")]
-            Self::LangevinDynamics(ld) => ld.steps(),
+            Self::LangevinDynamics(_) => None,
         }
     }
 
@@ -195,12 +181,11 @@ impl<T: Context> PropagationBlock<T> {
     }
 }
 
-/// Specifies how many moves should be performed,
-/// what moves can be performed and how they should be selected.
+/// Runs `steps` steps; each step runs every block once.
 #[derive(Debug)]
 pub struct Propagate<T: Context> {
-    max_repeats: usize,
-    current_repeat: usize,
+    max_steps: usize,
+    steps_done: usize,
     seed: Seed,
     rng: StdRng,
     blocks: Vec<PropagationBlock<T>>,
@@ -208,32 +193,18 @@ pub struct Propagate<T: Context> {
 }
 
 impl<T: Context> Propagate<T> {
-    /// Perform one 'propagate' cycle.
+    /// Perform one step: every block in order.
     ///
-    /// Returns `true` if the simulation should continue, `false` if finished.
-    pub fn propagate(
-        &mut self,
-        context: &mut T,
-        thermal_energy: f64,
-        step: &mut usize,
-        analyses: &mut AnalysisCollection<T>,
-    ) -> anyhow::Result<bool> {
-        if self.current_repeat >= self.max_repeats {
+    /// Returns `true` if a step was taken, `false` once `steps` have been taken.
+    pub fn propagate(&mut self, context: &mut T, thermal_energy: f64) -> anyhow::Result<bool> {
+        if self.steps_done >= self.max_steps {
             return Ok(false);
         }
 
         for block in self.blocks.iter_mut() {
-            block.propagate(
-                context,
-                &self.criterion,
-                thermal_energy,
-                step,
-                &mut self.rng,
-                analyses,
-            )?;
+            block.propagate(context, &self.criterion, thermal_energy, &mut self.rng)?;
         }
-
-        self.current_repeat += 1;
+        self.steps_done += 1;
         Ok(true)
     }
 
@@ -268,8 +239,8 @@ impl<T: Context> Propagate<T> {
         let rng = builder.seed.build_rng();
 
         Ok(Self {
-            max_repeats: builder.max_repeats,
-            current_repeat: 0,
+            max_steps: builder.max_steps,
+            steps_done: 0,
             seed: builder.seed,
             rng,
             blocks,
@@ -298,15 +269,15 @@ impl<T: Context> Propagate<T> {
             .sum()
     }
 
-    pub const fn max_repeats(&self) -> usize {
-        self.max_repeats
+    pub const fn max_steps(&self) -> usize {
+        self.max_steps
     }
 
-    /// Remove the repeat limit so `propagate()` never returns `false`.
+    /// Remove the step limit so `propagate()` never returns `false`.
     // Only the `cli`-gated umbrella / Wang-Landau drivers use this.
     #[cfg(feature = "cli")]
-    pub fn set_unlimited_repeats(&mut self) {
-        self.max_repeats = usize::MAX;
+    pub fn set_unlimited_steps(&mut self) {
+        self.max_steps = usize::MAX;
     }
 
     /// Replace the internal RNG with one seeded from `seed`.
@@ -318,7 +289,7 @@ impl<T: Context> Propagate<T> {
     /// Serialize the propagate state to a YAML value.
     pub fn to_yaml(&self) -> yaml_serde::Value {
         let mut map = yaml_serde::Mapping::new();
-        map.insert("steps".into(), self.max_repeats.into());
+        map.insert("steps".into(), self.max_steps.into());
         map.insert(
             "seed".into(),
             yaml_serde::to_value(self.seed).unwrap_or_default(),

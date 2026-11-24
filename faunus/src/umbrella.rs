@@ -391,7 +391,7 @@ fn run_window(
         context.hamiltonian_mut().push_front(harmonic_term);
 
         let propagate = Propagate::from_file(input, &context, rt)?;
-        let drive_len = propagate.max_repeats() as u64;
+        let drive_len = propagate.max_steps() as u64;
         let analyses = AnalysisCollection::default();
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
@@ -469,13 +469,13 @@ fn run_window(
     }
 
     // Production phase: hard-wall only, collect CV samples.
-    // Each run appends max_repeats new samples so users can extend sampling
+    // Each run appends max_steps new samples so users can extend sampling
     // by simply rerunning without editing the input file.
     let mut propagate = Propagate::from_file(input, &context, rt)?;
     // Per-window seed decorrelates the sampled trajectories across windows (the drive phase
     // is throwaway equilibration, so only production needs the independent stream).
     propagate.reseed(window_seed);
-    let max_repeats = propagate.max_repeats();
+    let max_steps = propagate.max_steps();
     // Block ensures `mc` (which owns `context`) is dropped before we serialize
     // the histogram and return the result.
     {
@@ -487,13 +487,13 @@ fn run_window(
         let cv = params.cv_builder.build_cv(mc.context())?;
         let initial_energy = mc.system_energy();
 
-        pb.set_length(max_repeats as u64);
+        pb.set_length(max_steps as u64);
         pb.set_position(0);
         pb.set_prefix(format!("W{window_index:>2} prod "));
         pb.set_message("");
         // Sample CV after each propagation cycle; run_n_steps(1) avoids the
         // borrow conflict between mc.iter() and mc.context()
-        for i in 0..max_repeats {
+        for i in 0..max_steps {
             mc.run_n_steps(1)?;
             histogram.add(cv.evaluate(mc.context()));
             pb.set_position(i as u64 + 1);

@@ -26,6 +26,8 @@ Frequency         | Description
 `!Once N`         | Once at step N
 `!End`            | Once after the last step
 
+Steps are [propagate steps](moves.md#steps-cycles-and-trial-moves), not trial moves.
+
 ### Reported quantities
 
 In `output.yaml` every analysis reports `num_samples`, the number of frames it sampled. Analyses

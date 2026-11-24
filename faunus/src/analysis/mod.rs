@@ -767,6 +767,34 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
         assert!(Analyze::<Backend>::results(&analysis).is_none());
     }
 
+    /// `!Every N` counts propagate steps, not the trial moves within them: `cycles: 7` must
+    /// not turn ten steps into seventy samples.
+    #[test]
+    fn frequency_counts_propagate_steps() {
+        let context = context();
+        let yaml = r#"
+propagate:
+  seed: !Fixed 1
+  steps: 10
+  collections:
+    - !Stochastic
+      cycles: 7
+      moves:
+        - !TranslateMolecule {molecule: MOL, max_displacement: 0.5, weight: 1.0, repeat: 3}
+"#;
+        let propagate = crate::propagate::Propagate::from_str(yaml, &context, 2.49).unwrap();
+        let analyses: AnalysisCollection<Backend> = vec![
+            Box::new(Counter::new(Frequency::Every(1))),
+            Box::new(Counter::new(Frequency::Every(5))),
+        ];
+        let mut mc =
+            crate::montecarlo::MarkovChain::new(context, propagate, 2.49, analyses).unwrap();
+        let last_step = mc.iter().map(Result::unwrap).last();
+        assert_eq!(last_step, Some(10));
+        assert_eq!(mc.analyses()[0].num_samples(), 10);
+        assert_eq!(mc.analyses()[1].num_samples(), 2); // steps 5 and 10
+    }
+
     /// Every analysis that reports something must be silent before its first sample.
     #[test]
     fn no_analysis_reports_before_its_first_sample() {

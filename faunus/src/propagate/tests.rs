@@ -33,7 +33,7 @@ moves:
    - !TranslateMolecule { molecule: Lipid, max_displacement: 0.5, weight: 0.5 }";
 
     let collection: CollectionBuilder = yaml_serde::from_str(string).unwrap();
-    assert_eq!(collection.repeat, 20);
+    assert_eq!(collection.cycles, 20);
     assert_eq!(collection.moves.len(), 3);
 }
 
@@ -43,7 +43,7 @@ fn langevin_config_parse() {
     let yaml = "!LangevinDynamics
 timestep: 0.002
 friction: 1.0
-steps: 500
+timesteps: 500
 temperature: 300.0";
     let builder: MoveCollectionBuilder = yaml_serde::from_str(yaml).unwrap();
     assert!(matches!(
@@ -53,7 +53,7 @@ temperature: 300.0";
     if let MoveCollectionBuilder::LangevinDynamics(config) = builder {
         assert_eq!(config.timestep, 0.002);
         assert_eq!(config.friction, 1.0);
-        assert_eq!(config.steps, 500);
+        assert_eq!(config.timesteps, 500);
     }
 }
 
@@ -69,9 +69,9 @@ fn propagate_parse() {
     let propagate =
         Propagate::from_file("tests/files/topology_pass.yaml", &context, THERMAL_ENERGY).unwrap();
 
-    assert_eq!(propagate.max_repeats, 10000);
+    assert_eq!(propagate.max_steps, 10000);
     assert_eq!(propagate.seed, Seed::Hardware);
-    assert_eq!(propagate.current_repeat, 0);
+    assert_eq!(propagate.steps_done, 0);
     assert_eq!(propagate.criterion, AcceptanceCriterion::MetropolisHastings);
     assert_eq!(propagate.blocks.len(), 2);
 
@@ -83,7 +83,7 @@ fn propagate_parse() {
     assert_eq!(stochastic.moves()[1].weight(), 1.0);
 
     let deterministic = &propagate.blocks[1];
-    assert_eq!(deterministic.repeat(), 5);
+    assert_eq!(deterministic.cycles(), Some(5));
     assert_eq!(deterministic.moves().len(), 1);
 }
 

@@ -478,7 +478,7 @@ impl GibbsMoveBuilder {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct GibbsConfig {
-    /// Number of intra-box propagation cycles between inter-box moves.
+    /// Steps each box runs between inter-box moves.
     pub(crate) intra_steps: usize,
     /// Inter-box moves to perform each Gibbs sweep.
     pub(crate) moves: Vec<GibbsMoveBuilder>,
@@ -534,7 +534,7 @@ impl<T: Context + Send + 'static> GibbsEnsemble<T> {
         self.max_sweeps
     }
 
-    /// Number of intra-box propagation cycles per sweep.
+    /// Steps each box runs per sweep.
     pub fn intra_steps(&self) -> usize {
         self.intra_steps
     }

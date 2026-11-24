@@ -6,13 +6,22 @@ Monte Carlo moves are defined in the `propagate` section of the YAML input file.
 
 Key           | Required | Default              | Description
 ------------- | -------- | -------------------- | -------------------------------------------
-`steps`       | no       | 1                    | Number of propagate steps (the outer loop)
+`steps`       | no       | 1                    | Number of steps
 `collections` | no       | `[]`                 | Ordered list of move collections (see below)
 `seed`        | no       | `Hardware`           | RNG seed: `Hardware` (random) or `!Fixed N`
-`criterion`   | no       | `MetropolisHastings` | Acceptance criterion (`Metropolis` or `Minimize`)
+`criterion`   | no       | `MetropolisHastings` | `MetropolisHastings` (alias `Metropolis`) or `Minimize`
 
-Each propagate step executes every collection in order; after all collections
-have run, one step is complete and the step counter advances.
+### Steps, cycles and trial moves
+
+Term       | Meaning
+---------- | -------------------------------------------
+step       | One pass over all collections; `steps` per run
+cycle      | One draw from a collection: one move (`!Stochastic`) or all (`!Deterministic`); `cycles` per step
+trial move | One accepted-or-rejected attempt; `repeat` per draw
+sweep      | Gibbs ensemble only: `intra_steps` steps plus the inter-box moves
+
+Analysis `frequency`, the state-file step count and `step` output columns all count steps.
+The count continues across restarts.
 
 ## Collections
 
@@ -22,12 +31,11 @@ Two types are available:
 - `!Stochastic` — each cycle draws *one* move at random, with probability
   proportional to `weight`. This is the normal Monte Carlo sampling mode.
 - `!Deterministic` — each cycle executes *all* moves in order.
-  Useful for e.g. hybrid MC/MD schemes. The `weight` field is unused here but
-  still required by the move schema.
+  Useful for e.g. hybrid MC/MD schemes. `weight` is ignored.
 
 Key      | Required | Default | Description
 -------- | -------- | ------- | -------------------------------------------
-`cycles` | no       | 1       | How many times the collection runs per propagate step
+`cycles` | no       | 1       | Cycles per step
 `moves`  | no       | `[]`    | List of moves
 
 ## Common move options
@@ -36,17 +44,13 @@ Every move accepts at least:
 
 Key      | Description
 -------- | -------------------------------------------
-`weight` | Selection weight (only meaningful inside `!Stochastic` collections)
-`repeat` | How many trial moves to attempt *each time the move is selected* (default 1)
+`weight` | Selection weight, only used in `!Stochastic` collections (default 1)
+`repeat` | Trial moves each time the move is drawn (default 1)
 `max_displacement` | Maximum translational displacement (Å), for translational moves (alias `dp`)
 `max_angle`        | Maximum rotational angle (radians), for rotational moves (alias `dprot`)
 
-The collection's `cycles` and the move's `repeat` nest: `cycles` controls how
-often moves are drawn from the collection each propagate step, and the move's
-`repeat` controls how many trials are performed per draw. For example, a
-stochastic collection with `cycles: 100` containing a move with `repeat: 5`
-will attempt that move up to 500 times per step (depending on how often it is
-drawn).
+Example: `cycles: 100`, two equally weighted moves, one with `repeat: 5` → on average
+100 × ½ × 5 = 250 trials of that move per step.
 
 ## Example
 
@@ -84,8 +88,8 @@ Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `molecule`   | yes      |         | Name of the molecule type (not allowed for `atomic` molecules)
 `max_displacement` | yes |    | Maximum displacement (Å); alias `dp`
-`weight`     | yes      |         | Selection weight
-`repeat`     | no       | 1       | Repetitions per selection
+`weight`     | no       | 1       | Selection weight
+`repeat`     | no       | 1       | Trial moves per draw
 `directions` | no       | `xyz`   | Active directions (`x`, `y`, `z`, `xy`, `xz`, `yz`, `xyz`)
 
 ---
@@ -105,10 +109,10 @@ If `atom` is specified, only atoms of that type are selected.
 Key            | Required | Default | Description
 -------------- | -------- | ------- | -------------------------------------------
 `max_displacement` | yes |    | Maximum displacement (Å); alias `dp`
-`weight`       | yes      |         | Selection weight
+`weight`       | no       | 1       | Selection weight
 `molecule`     | no       |         | Restrict to this molecule type
 `atom`         | no       |         | Restrict to this atom type
-`repeat`       | no       | 1       | Repetitions per selection
+`repeat`       | no       | 1       | Trial moves per draw
 `directions`   | no       | `xyz`   | Active directions (`x`, `y`, `z`, `xy`, `xz`, `yz`, `xyz`)
 `preferential` | no       |         | Preferential sampling settings (see below)
 
@@ -203,8 +207,8 @@ Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
 `max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
-`weight`   | yes      |         | Selection weight
-`repeat`   | no       | 1       | Repetitions per selection
+`weight`   | no       | 1       | Selection weight
+`repeat`   | no       | 1       | Trial moves per draw
 
 ---
 
@@ -227,8 +231,8 @@ Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
 `max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
-`weight`   | yes      |         | Selection weight
-`repeat`   | no       | 1       | Repetitions per selection
+`weight`   | no       | 1       | Selection weight
+`repeat`   | no       | 1       | Trial moves per draw
 
 The molecule must be bonded and free to change shape; declaring it rigid or frozen, or
 giving it no bonds, is an input error. Partially active molecules, as encountered under
@@ -258,8 +262,8 @@ Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
 `max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
-`weight`   | yes      |         | Selection weight
-`repeat`   | no       | 1       | Repetitions per selection
+`weight`   | no       | 1       | Selection weight
+`repeat`   | no       | 1       | Trial moves per draw
 
 The restrictions listed for [`PivotMove`](#pivot-move) apply here too.
 
@@ -299,7 +303,7 @@ Key         | Required | Default | Description
 `threshold` | yes      |         | Clustering distance (Å); mass-center or bead separation
 `use_com`   | no       | `true`  | Cluster on mass-center (`true`) or closest-bead (`false`) distance
 `weight`    | no       | 1       | Selection weight in a `!Stochastic` collection
-`repeat`    | no       | 1       | Repetitions per selection
+`repeat`    | no       | 1       | Trial moves per draw
 
 Output reports the mean cluster size $\langle N\rangle$ with an automatically blocked standard
 error. It also reports the fraction of trials rejected to preserve membership
@@ -346,9 +350,9 @@ propagate:
 Key      | Required | Default      | Description
 -------- | -------- | ------------ | -------------------------------------------
 `volume_displacement` | yes |     | Width $\Delta \ln V$ of the displacement in $\ln V$; dimensionless (alias `dV`)
-`weight` | yes      |              | Selection weight
+`weight` | no       | 1            | Selection weight
 `method` | no       | `Isotropic`  | Scaling policy (see table below)
-`repeat` | no       | 1            | Repetitions per selection
+`repeat` | no       | 1            | Trial moves per draw
 
 ### Scaling policies
 
@@ -593,7 +597,7 @@ Key           | Required | Default | Description
 ------------- | -------- | ------- | -------------------------------------------
 `reactions`   | yes      |         | List of reactions (see below)
 `weight`      | no       | 1       | Selection weight
-`repeat`      | no       | 1       | Repetitions per selection
+`repeat`      | no       | 1       | Trial moves per draw
 `temperature` | no       |         | Deprecated and ignored; see below
 
 The system temperature (`system.medium.temperature`) sets the thermal energy $RT$ used
@@ -672,7 +676,7 @@ an explicit interface.
 When `propagate.gibbs` is present, faunus clones the system into two boxes
 and alternates between:
 
-1. Intra-box MC — each box runs `intra_steps` propagation cycles in parallel
+1. Intra-box MC — each box runs `intra_steps` steps in parallel
    (using the `collections` defined above).
 2. Inter-box moves — volume exchange and particle transfer between the two boxes.
 
@@ -699,7 +703,7 @@ propagate:
 
 Key            | Required | Default | Description
 -------------- | -------- | ------- | -------------------------------------------
-`intra_steps`  | yes      |         | Intra-box propagation cycles between inter-box moves
+`intra_steps`  | yes      |         | Steps per box between inter-box moves
 `moves`        | yes      |         | List of inter-box moves
 
 ### Gibbs Volume Exchange
@@ -784,8 +788,8 @@ integrated with per-body friction and stochastic forces at the target temperatur
 Requires the `gpu` cargo feature (`cargo run --features gpu`).
 
 Langevin dynamics is placed as a collection entry alongside Monte Carlo moves,
-enabling hybrid MC/LD schemes where MC sweeps alternate with LD blocks within
-each propagation cycle. On each MC→LD transition, atom positions, centers of mass,
+enabling hybrid MC/LD schemes where MC collections alternate with LD blocks within
+each step. On each MC→LD transition, atom positions, centers of mass,
 and rigid-body orientations are uploaded to the compute device; after the LD block,
 updated positions and orientations are downloaded back.
 
@@ -881,7 +885,7 @@ propagate:
     - !LangevinDynamics
       timestep: 0.1
       friction: 5.0
-      steps: 20
+      timesteps: 20
       temperature: 298.15
 ```
 
@@ -891,9 +895,9 @@ Key                  | Required | Default | Description
 -------------------- | -------- | ------- | -------------------------------------------
 `timestep`           | yes      |         | Integration timestep (ps)
 `friction`           | yes      |         | Friction coefficient (1/ps)
-`steps`              | yes      |         | Number of LD steps per block
+`timesteps`          | yes      |         | Integration timesteps per step
 `temperature`        | yes      |         | Target temperature (K)
-`cell_list_rebuild`  | no       | 20      | Cell list rebuild interval (steps; 0 = only at start)
+`cell_list_rebuild`  | no       | 20      | Cell list rebuild interval (timesteps; 0 = only at start)
 
 ### Output
 
@@ -904,7 +908,7 @@ from the equipartition theorem:
 - !LangevinDynamics
   timestep: 0.1
   friction: 5.0
-  steps: 20
+  timesteps: 20
   temperature: 298.15
   measured_temperature:
     translational: {mean: 298.3, error: 1.2}

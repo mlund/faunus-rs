@@ -45,10 +45,10 @@ analysis:
   - !CollectiveVariable
     property: volume
     file: volume.dat.gz
-    frequency: !Every 10
+    frequency: !Every 2
   - !PolymerShape
     selection: "molecule polymer"
-    frequency: !Every 10
+    frequency: !Every 2
 
 propagate:
   seed: !Fixed 42

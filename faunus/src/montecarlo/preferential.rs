@@ -546,17 +546,10 @@ mod tests {
 
         let thermal_energy = crate::R_IN_KJ_PER_MOL * 300.0;
         let criterion = AcceptanceCriterion::MetropolisHastings;
-        let mut step = 0;
         let mut counts = [0.0f64; 5];
         for sweep in 0..SWEEPS {
             runner
-                .do_move(
-                    &mut context,
-                    &criterion,
-                    thermal_energy,
-                    &mut step,
-                    &mut rng,
-                )
+                .do_move(&mut context, &criterion, thermal_energy, &mut rng)
                 .unwrap();
             if sweep < EQUILIBRATE {
                 continue;

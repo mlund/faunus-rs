@@ -267,7 +267,7 @@ impl WangLandau {
 
                         // WL controls its own loop; disable the YAML repeat limit
                         let mut propagate = Propagate::from_file(input_ref, &ctx, rt)?;
-                        propagate.set_unlimited_repeats();
+                        propagate.set_unlimited_steps();
                         let out_dir = walker_output_dir(state_dir_ref, i);
                         let analyses = analysis::from_file_creating_dir(
                             input_ref,
