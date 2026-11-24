@@ -45,6 +45,7 @@ propagate:
       atom: Na
       molecule: cation
       max_displacement: 5.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:
@@ -61,6 +62,7 @@ propagate:
       atom: Cl
       molecule: anion
       max_displacement: 5.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:

@@ -51,6 +51,7 @@ propagate:
           samples: 2000
         bounding_radii:
         - 1.7763568394002505e-15
+      directions: xyz
       weight: 1.0
       repeat: 20
       statistics:

@@ -104,6 +104,7 @@ propagate:
       atom: null
       molecule: polymer
       max_displacement: 10.0
+      directions: xyz
       weight: 1.0
       repeat: 32
       statistics:
@@ -120,6 +121,7 @@ propagate:
       atom: null
       molecule: counterion
       max_displacement: 110.0
+      directions: xyz
       weight: 1.0
       repeat: 32
       statistics:

@@ -156,6 +156,7 @@ propagate:
       atom: Na
       molecule: Na+
       max_displacement: 50.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:
@@ -172,6 +173,7 @@ propagate:
       atom: Cl
       molecule: Cl-
       max_displacement: 50.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:

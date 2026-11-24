@@ -104,6 +104,7 @@ propagate:
       atom: null
       molecule: osmolyte_a
       max_displacement: 2.0
+      directions: xyz
       weight: 1.0
       repeat: 20
       statistics:
@@ -120,6 +121,7 @@ propagate:
       atom: null
       molecule: osmolyte_r
       max_displacement: 2.0
+      directions: xyz
       weight: 1.0
       repeat: 20
       statistics:

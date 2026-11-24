@@ -45,6 +45,7 @@ propagate:
       atom: null
       molecule: cation
       max_displacement: 40.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:
@@ -61,6 +62,7 @@ propagate:
       atom: null
       molecule: anion
       max_displacement: 40.0
+      directions: xyz
       weight: 1.0
       repeat: 1
       statistics:
