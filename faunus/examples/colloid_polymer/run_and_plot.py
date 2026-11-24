@@ -99,7 +99,7 @@ PRODUCTION_ANALYSIS = """\
     selections: ["molecule Colloid", "molecule Colloid"]
     file: rdf.dat
     resolution: 1.0
-    frequency: !Every 10
+    frequency: !Every 1
   - !Trajectory
     file: confout.xyz
     frequency: End"""
@@ -201,7 +201,7 @@ def equilibrate():
 
 def production(repeat):
     write_yaml("input.yaml", repeat=repeat, dp=5.0, analysis=PRODUCTION_ANALYSIS)
-    print(f"=== Production ({repeat} sweeps) ===")
+    print(f"=== Production ({repeat} steps) ===")
     faunus("run", "-i", "input.yaml", "-s", "state.yaml")
     print()
 
@@ -242,7 +242,7 @@ if __name__ == "__main__":
         nargs="?",
         type=int,
         default=1000,
-        help="number of production sweeps (default: 1000)",
+        help="number of production steps (default: 1000)",
     )
     parser.add_argument(
         "--restart",

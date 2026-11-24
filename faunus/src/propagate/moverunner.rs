@@ -70,7 +70,6 @@ impl<T: Context> MoveRunner<T> {
         context: &mut T,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
-        step: &mut usize,
         rng: &mut dyn RngCore,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
@@ -110,8 +109,6 @@ impl<T: Context> MoveRunner<T> {
             }
             self.inner.on_trial_outcome(context, accepted);
         }
-
-        *step += self.inner.step_by();
         Ok(())
     }
 

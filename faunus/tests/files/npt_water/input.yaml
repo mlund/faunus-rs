@@ -43,14 +43,14 @@ system:
     - !Pressure {atm: 1}
 
 analysis:
-  - !CollectiveVariable {property: volume, frequency: !Every 10}
-  - !Trajectory {file: "traj.xtc", frequency: !Every 1000}
+  - !CollectiveVariable {property: volume, frequency: !Every 3}
+  - !Trajectory {file: "traj.xtc", frequency: !Every 333}
   - !Trajectory {file: "confout.xyz", frequency: End}
   - !RadialDistribution
     selections: ["atomtype OW", "atomtype OW"]
     file: rdf.dat
     resolution: 0.1
-    frequency: !Every 10
+    frequency: !Every 3
 
 
 propagate:

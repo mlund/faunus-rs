@@ -461,16 +461,30 @@ pub struct MarkovChainIterator<'a, T: Context> {
 impl<T: Context> Iterator for MarkovChainIterator<'_, T> {
     type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.markov.propagate.propagate(
-            &mut self.markov.context,
-            self.markov.thermal_energy,
-            &mut self.markov.step,
-            &mut self.markov.analyses,
-        ) {
+        match self.markov.advance() {
             Err(e) => Some(Err(e)),
             Ok(true) => Some(Ok(self.markov.step)),
             Ok(false) => None,
         }
+    }
+}
+
+impl<T: Context> MarkovChain<T> {
+    /// Take one step, then sample the analyses.
+    ///
+    /// Sampling here, once per step, is what makes `!Every N` count steps whatever the
+    /// collections contain; `step` is checkpointed, so the count continues across restarts.
+    /// Returns `false` once `propagate.steps` have been taken.
+    pub(crate) fn advance(&mut self) -> Result<bool> {
+        if !self
+            .propagate
+            .propagate(&mut self.context, self.thermal_energy)?
+        {
+            return Ok(false);
+        }
+        self.step += 1;
+        self.analyses.sample(&self.context, self.step)?;
+        Ok(true)
     }
 }
 
@@ -540,19 +554,9 @@ impl<T: Context + 'static> MarkovChain<T> {
         self.analyses.write_to_disk()
     }
 
-    /// Run up to `n` propagation cycles (intra-box steps for Gibbs ensemble).
+    /// Run up to `n` steps.
     pub fn run_n_steps(&mut self, n: usize) -> Result<()> {
-        for _ in 0..n {
-            if !self.propagate.propagate(
-                &mut self.context,
-                self.thermal_energy,
-                &mut self.step,
-                &mut self.analyses,
-            )? {
-                break;
-            }
-        }
-        Ok(())
+        self.iter().take(n).try_for_each(|step| step.map(|_| ()))
     }
 
     /// Set the thermal energy, _kT_.

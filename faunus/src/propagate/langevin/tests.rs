@@ -284,13 +284,13 @@ fn langevin_config_deserialize() {
     let yaml = r#"
         timestep: 0.002
         friction: 10.0
-        steps: 1000
+        timesteps: 1000
         temperature: 300.0
     "#;
     let config: LangevinConfig = yaml_serde::from_str(yaml).unwrap();
     assert_eq!(config.timestep, 0.002);
     assert_eq!(config.friction, 10.0);
-    assert_eq!(config.steps, 1000);
+    assert_eq!(config.timesteps, 1000);
     assert_eq!(config.temperature, 300.0);
     assert_eq!(config.cell_list_rebuild, 20, "default should be 20");
 }
@@ -300,7 +300,7 @@ fn langevin_config_with_cell_list_rebuild() {
     let yaml = r#"
         timestep: 0.001
         friction: 5.0
-        steps: 500
+        timesteps: 500
         temperature: 298.0
         cell_list_rebuild: 50
     "#;
@@ -313,7 +313,7 @@ fn langevin_config_rejects_unknown_fields() {
     let yaml = r#"
         timestep: 0.002
         friction: 10.0
-        steps: 1000
+        timesteps: 1000
         temperature: 300.0
         bogus_field: 42
     "#;
@@ -330,7 +330,7 @@ fn langevin_runner_to_yaml_without_temperature() {
     let config = LangevinConfig {
         timestep: 0.002,
         friction: 10.0,
-        steps: 500,
+        timesteps: 500,
         temperature: 300.0,
         cell_list_rebuild: 20,
     };
@@ -343,7 +343,7 @@ fn langevin_runner_to_yaml_without_temperature() {
         if let yaml_serde::Value::Mapping(map) = &tagged.value {
             assert!(map.contains_key(yaml_serde::Value::from("timestep")));
             assert!(map.contains_key(yaml_serde::Value::from("friction")));
-            assert!(map.contains_key(yaml_serde::Value::from("steps")));
+            assert!(map.contains_key(yaml_serde::Value::from("timesteps")));
             assert!(map.contains_key(yaml_serde::Value::from("temperature")));
             assert!(!map.contains_key(yaml_serde::Value::from("measured_temperature")));
         } else {
@@ -359,7 +359,7 @@ fn langevin_runner_to_yaml_with_temperature() {
     let config = LangevinConfig {
         timestep: 0.002,
         friction: 10.0,
-        steps: 500,
+        timesteps: 500,
         temperature: 300.0,
         cell_list_rebuild: 20,
     };
@@ -973,7 +973,7 @@ impl PhysicsTestSetup {
         let config = LangevinConfig {
             timestep: dt,
             friction,
-            steps: 0,
+            timesteps: 0,
             temperature,
             cell_list_rebuild: 0,
         };
@@ -1189,7 +1189,7 @@ fn thermostat_positions(rng_seed: u32) -> Vec<[f32; 4]> {
     let config = LangevinConfig {
         timestep: 0.002,
         friction: 10.0,
-        steps: 0,
+        timesteps: 0,
         temperature,
         cell_list_rebuild: 0,
     };
@@ -1278,7 +1278,7 @@ fn upload_and_reconstruct_preserves_a_rotated_rigid_molecule() {
     let config = LangevinConfig {
         timestep: 0.001,
         friction: 1.0,
-        steps: 0,
+        timesteps: 0,
         temperature: 300.0,
         cell_list_rebuild: 20,
     };
@@ -1340,11 +1340,11 @@ fn check_supported_names_unsupported_terms() {
 // ============================================================================
 
 /// The LD settings the tests below vary from.
-fn ld_config(steps: usize) -> LangevinConfig {
+fn ld_config(timesteps: usize) -> LangevinConfig {
     LangevinConfig {
         timestep: 0.005,
         friction: 10.0,
-        steps,
+        timesteps,
         temperature: 298.15,
         cell_list_rebuild: 10,
     }
@@ -1762,11 +1762,11 @@ system:
     ))
 }
 
-fn flexible_config(steps: usize) -> LangevinConfig {
+fn flexible_config(timesteps: usize) -> LangevinConfig {
     LangevinConfig {
         timestep: 0.002,
         cell_list_rebuild: 20,
-        ..ld_config(steps)
+        ..ld_config(timesteps)
     }
 }
 
@@ -1799,7 +1799,7 @@ fn flexible_atom_diffusion() {
         })
         .sum::<f64>()
         / initial.len() as f64;
-    let (gamma, t) = (config.friction, config.steps as f64 * config.timestep);
+    let (gamma, t) = (config.friction, config.timesteps as f64 * config.timestep);
     let d = crate::R_IN_KJ_PER_MOL * config.temperature * 100.0 / (39.948 * gamma);
     let expected = 6.0 * d * (t - (1.0 - (-gamma * t).exp()) / gamma);
     // Per-atom |Δr|² has relative spread √(2/3); 512 atoms give ≈ 4 %

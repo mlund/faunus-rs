@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.3
-  git_revision: v3.0.0-beta.3-9-gbe5e4d4-dirty
+  git_revision: v3.0.0-beta.3-36-g36a15bb-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -29,23 +29,23 @@ energy:
 energy_timers:
 - cell_overlap:
     total: 0.14
-    energy: 0.09
+    energy: 0.1
     update: 0.05
 - nonbonded:
-    total: 99.72
-    energy: 82.84
-    update: 16.89
+    total: 99.71
+    energy: 83.03
+    update: 16.68
 - external_pressure:
-    total: 0.14
+    total: 0.15
     energy: 0.1
-    update: 0.04
+    update: 0.05
 propagate:
   steps: 1000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 4.977131219
+    elapsed_seconds: 4.596080009
     moves:
     - !TranslateMolecule
       molecule: water
@@ -97,9 +97,9 @@ propagate:
 analysis:
 - collective_variable:
     property: Volume
-    num_samples: 300
-    mean: 3927.0920907260625
-    rms: 3927.4309699263927
+    num_samples: 333
+    mean: 3926.178012843897
+    rms: 3926.51292607016
 - structure_writer:
     file: traj.xtc
     num_samples: 3
@@ -107,5 +107,5 @@ analysis:
     file: confout.xyz
     num_samples: 1
 - rdf:
-    num_samples: 300
+    num_samples: 333
     num_bins: 93

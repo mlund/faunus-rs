@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-36-g36a15bb-dirty
 medium:
   permittivity: Water
   salt: null
@@ -26,20 +26,20 @@ energy_change:
   initial: -243.41791139269253
 energy_timers:
 - cell_overlap:
-    total: 5.0
-    energy: 3.4
-    update: 1.6
+    total: 5.59
+    energy: 3.72
+    update: 1.87
 - nonbonded:
-    total: 95.0
-    energy: 93.19
-    update: 1.81
+    total: 94.41
+    energy: 91.88
+    update: 2.53
 propagate:
   steps: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 0.113582808
+    elapsed_seconds: 0.013657901
     moves:
     - !TranslateAtom
       atom: null
@@ -77,33 +77,33 @@ propagate:
 analysis:
 - scaled_widom_insertion:
     atom: Na
-    num_samples: 2000
+    num_samples: 2500
     excess_chemical_potential/kT:
       short_range:
-        mean: 0.16104313932586029
-        error: 0.0018924053394129637
+        mean: 0.16540262455213472
+        error: 0.0018073785270700162
       electrostatic:
-        mean: -0.39315899082337497
-        error: 0.005538953320975873
+        mean: -0.3960534371242577
+        error: 0.004867965120663136
       total:
-        mean: -0.23211585149751474
-        error: 0.005987704090227995
+        mean: -0.2306508125721232
+        error: 0.0055333573685432
     unscaled_widom/kT:
-      mean: -0.2615201969129146
-      error: 0.009377351963379837
+      mean: -0.26124104913955193
+      error: 0.007777370340954588
 - scaled_widom_insertion:
     atom: Cl
-    num_samples: 2000
+    num_samples: 2500
     excess_chemical_potential/kT:
       short_range:
-        mean: 0.16104313932586029
-        error: 0.0018924053394129637
+        mean: 0.16540262455213472
+        error: 0.0018073785270700162
       electrostatic:
-        mean: -0.39029326752306803
-        error: 0.004183004376749019
+        mean: -0.3941587742799391
+        error: 0.0049047658289952095
       total:
-        mean: -0.22925012819720783
-        error: 0.004522537007496316
+        mean: -0.22875614972780509
+        error: 0.005023766645172531
     unscaled_widom/kT:
-      mean: -0.25631367423715573
-      error: 0.006760177449369757
+      mean: -0.2580172130044923
+      error: 0.00798487195616779

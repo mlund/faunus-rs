@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.3
-  git_revision: v3.0.0-beta.3-9-gbe5e4d4-dirty
+  git_revision: v3.0.0-beta.3-36-g36a15bb-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -19,9 +19,9 @@ cell: !Cuboid
 - 15.709961470420621
 - 15.709961470420621
 energy_change:
-  drift: 1.2369127944111824e-10
-  final: -48362.689082880315
-  initial: -48430.761759632005
+  drift: 1.8189894035458565e-10
+  final: -48362.68907675228
+  initial: -48430.76179971863
 energy:
 - external_pressure:
     pressure/kJ·mol⁻¹·Å⁻³: 0.000061019341250700007
@@ -32,28 +32,28 @@ energy:
     k_vectors: 709
 energy_timers:
 - cell_overlap:
-    total: 0.05
-    energy: 0.03
-    update: 0.02
-- nonbonded:
-    total: 34.16
-    energy: 28.59
-    update: 5.57
-- external_pressure:
-    total: 0.05
-    energy: 0.03
-    update: 0.02
-- ewald_reciprocal:
-    total: 65.75
+    total: 0.12
     energy: 0.08
-    update: 65.66
+    update: 0.04
+- nonbonded:
+    total: 78.24
+    energy: 65.06
+    update: 13.18
+- external_pressure:
+    total: 0.11
+    energy: 0.08
+    update: 0.04
+- ewald_reciprocal:
+    total: 21.53
+    energy: 0.1
+    update: 21.44
 propagate:
   steps: 500
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 7.77732941
+    elapsed_seconds: 2.9279904549999998
     moves:
     - !TranslateMolecule
       molecule: water
@@ -69,7 +69,7 @@ propagate:
           samples: 32000
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: 110.67954583448591
+        energy_change_sum: 110.67960916942684
         acceptance_ratio: 0.4250625
     - !RotateMolecule
       molecule: water
@@ -84,7 +84,7 @@ propagate:
           samples: 32000
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -32.86653733091225
+        energy_change_sum: -32.86773110420472
         acceptance_ratio: 0.5058125
     - !VolumeMove
       volume_displacement: 0.03
@@ -99,15 +99,15 @@ propagate:
           samples: 2500
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -9.740331752007478
+        energy_change_sum: -9.73915509905055
         acceptance_ratio: 0.6836
   criterion: MetropolisHastings
 analysis:
 - collective_variable:
     property: Volume
-    num_samples: 150
-    mean: 3878.44567395659
-    rms: 3878.7673581492304
+    num_samples: 166
+    mean: 3875.512876525985
+    rms: 3875.8252375786788
 - energy:
-    num_samples: 150
-    mean: -48401.764315232664
+    num_samples: 166
+    mean: -48404.27425353253

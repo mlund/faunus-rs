@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-36-g36a15bb-dirty
 medium:
   permittivity: Water
   salt: null
@@ -37,20 +37,20 @@ energy_change:
   initial: -12.508348774890969
 energy_timers:
 - cell_overlap:
-    total: 2.61
-    energy: 1.84
-    update: 0.78
+    total: 3.21
+    energy: 2.26
+    update: 0.95
 - nonbonded:
-    total: 97.39
-    energy: 96.59
-    update: 0.8
+    total: 96.79
+    energy: 95.52
+    update: 1.27
 propagate:
   steps: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 0.216434036
+    elapsed_seconds: 0.181566177
     moves:
     - !SpeciationMove
       reactions:
@@ -189,18 +189,18 @@ analysis:
 - collective_variable:
     property: Count
     description: 'selection: atomtype GLU'
-    num_samples: 6000
-    mean: 0.9990000000000016
-    rms: 0.9994998749374617
+    num_samples: 2000
+    mean: 0.9990000000000003
+    rms: 0.9994998749374611
 - collective_variable:
     property: Count
     description: 'selection: atomtype HHIS'
-    num_samples: 6000
-    mean: 0.21549999999999958
+    num_samples: 2000
+    mean: 0.21549999999999955
     rms: 0.46421977553740595
 - collective_variable:
     property: Count
     description: 'selection: atomtype CYS'
-    num_samples: 6000
+    num_samples: 2000
     mean: 0.04299999999999996
     rms: 0.20736441353327711

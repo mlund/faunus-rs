@@ -238,11 +238,6 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
         Bias::None
     }
 
-    /// Number of steps to advance after attempting the move.
-    fn step_by(&self) -> usize {
-        1
-    }
-
     /// Called once the trial has been resolved, with the context in its settled state.
     ///
     /// The context is whatever the outcome made it: the trial configuration if the move was

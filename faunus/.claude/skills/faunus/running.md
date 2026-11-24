@@ -50,6 +50,9 @@ faunus -v run -i input.yaml
 RUST_LOG=Debug faunus run -i input.yaml
 ```
 
+Check `faunus --version` first: an older 3.0 beta (e.g. from conda) may be earlier on the
+`PATH` and lacks options such as `--check`.
+
 ### Validating input (dry run)
 
 `--check` builds and validates the whole input — the same construction a real run does
@@ -111,8 +114,8 @@ groups:                           # one per molecule group
 step: 5000
 ```
 
-- Stores particle types + positions, the cell, per-group size and rigid-body `quaternion`
-  (needed by LD and 6D-tabulated energies), and the step count.
+- Stores particle types + positions (so titration states carry over between runs), the cell, per-group size and rigid-body `quaternion`
+  (needed by LD and 6D-tabulated energies), and the step count (propagate steps; continues on resume).
 - Does NOT store topology, Hamiltonian, moves, or analyses — those are rebuilt from the
   input YAML on resume, which keeps the file small and avoids serializing trait objects.
 - `size` is `Full`, `Empty`, or a partial count for grand-canonical / speciation groups.

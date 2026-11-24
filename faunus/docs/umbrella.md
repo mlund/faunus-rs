@@ -70,7 +70,7 @@ Adjacent windows must overlap (`spacing < width`) for stitching.
 During the drive phase a harmonic bias $\frac{1}{2}k(x - c_i)^2$ steers each walker toward the
 center of its window. The drive ends as soon as the collective variable enters the window. If
 `propagate.steps` steps pass without the walker arriving, the run stops with an error;
-strengthen `force_constant` or allow more sweeps.
+strengthen `force_constant` or allow more steps.
 
 ## Per-window lifecycle
 
@@ -107,7 +107,7 @@ $\sigma = RT / \sqrt{\sum_j N_j}$,
 which shrinks as sampling accumulates.
 
 Two effects make `stderr_kT` a lower bound on the true uncertainty. It assumes statistically
-independent samples, whereas successive Monte Carlo sweeps are correlated; scale it by $\sqrt{g}$,
+independent samples, whereas successive Monte Carlo steps are correlated; scale it by $\sqrt{g}$,
 the statistical inefficiency of the collective variable, for a rigorous bound. It also measures a
 single bin in isolation. The free-energy offset between adjacent windows is itself estimated from
 the overlap fractions, and these offsets accumulate along the reaction coordinate. That

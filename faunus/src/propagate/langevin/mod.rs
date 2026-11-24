@@ -47,11 +47,11 @@ pub struct LangevinConfig {
     pub timestep: f64,
     /// Friction coefficient in 1/ps
     pub friction: f64,
-    /// Number of LD steps per propagation cycle
-    pub steps: usize,
+    /// Integration timesteps per propagate step
+    pub timesteps: usize,
     /// Temperature in Kelvin
     pub temperature: f64,
-    /// Cell list rebuild interval (steps). Default: 20.
+    /// Cell list rebuild interval (timesteps). Default: 20.
     #[serde(default = "default_cell_list_rebuild")]
     pub cell_list_rebuild: u32,
 }
@@ -79,10 +79,6 @@ pub struct LangevinRunner {
 }
 
 impl LangevinRunner {
-    pub(in crate::propagate) fn steps(&self) -> usize {
-        self.config.steps
-    }
-
     pub(in crate::propagate) fn energy_change_sum(&self) -> f64 {
         self.energy_change_sum
     }
@@ -148,7 +144,7 @@ impl LangevinRunner {
         }
         // Safe: always Some after the branch above
         let gpu = self.gpu.as_mut().unwrap();
-        Self::integrate(context, gpu, self.config.steps)?;
+        Self::integrate(context, gpu, self.config.timesteps)?;
 
         // LD -> MC: download positions and write back to context
         let gpu = self.gpu.as_ref().unwrap();
@@ -490,7 +486,7 @@ impl LangevinRunner {
         let mut map = yaml_serde::Mapping::new();
         map.insert("timestep".into(), self.config.timestep.into());
         map.insert("friction".into(), self.config.friction.into());
-        map.insert("steps".into(), self.config.steps.into());
+        map.insert("timesteps".into(), self.config.timesteps.into());
         map.insert("temperature".into(), self.config.temperature.into());
         map.insert(
             "cell_list_rebuild".into(),

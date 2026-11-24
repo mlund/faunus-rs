@@ -81,9 +81,8 @@ impl MoveBuilder {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CollectionBuilder {
-    #[serde(rename = "cycles")]
     #[serde(default = "default_repeat")]
-    pub(super) repeat: usize,
+    pub(super) cycles: usize,
     #[serde(default)]
     pub(super) moves: Vec<MoveBuilder>,
 }
@@ -99,7 +98,7 @@ impl CollectionBuilder {
             .into_iter()
             .map(|m| m.build(context, thermal_energy))
             .collect::<anyhow::Result<Vec<_>>>()?;
-        Ok((self.repeat, moves))
+        Ok((self.cycles, moves))
     }
 }
 
@@ -128,9 +127,9 @@ impl MoveCollectionBuilder {
             Self::Stochastic(b) => (SelectionStrategy::Stochastic, b),
             Self::Deterministic(b) => (SelectionStrategy::Deterministic, b),
         };
-        let (repeat, moves) = builder.build_moves(context, thermal_energy)?;
+        let (cycles, moves) = builder.build_moves(context, thermal_energy)?;
         Ok(PropagationBlock::MonteCarlo(MoveCollection::new(
-            strategy, repeat, moves,
+            strategy, cycles, moves,
         )))
     }
 }
@@ -141,7 +140,7 @@ impl MoveCollectionBuilder {
 pub(super) struct PropagateBuilder {
     #[serde(rename = "steps")]
     #[serde(default = "default_repeat")]
-    pub(super) max_repeats: usize,
+    pub(super) max_steps: usize,
     #[serde(default)]
     pub(super) seed: Seed,
     #[serde(default)]

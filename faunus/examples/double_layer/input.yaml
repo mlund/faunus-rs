@@ -18,7 +18,7 @@
 {%- set lz           = lz           | default(21.0) %}       {# plate separation 2a (Å) #}
 {%- set dG           = dG           | default(20.0) %}       {# 2Na⁺⇌Ca²⁺ free energy (kJ/mol); high → mono #}
 {%- set eps_r        = eps_r        | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
-{%- set sweeps       = sweeps       | default(20000) %}      {# MC sweeps per run (use two runs: equilibrate, then sample) #}
+{%- set steps        = steps        | default(20000) %}      {# MC steps per run (use two runs: equilibrate, then sample) #}
 {%- set k        = (total_charge / 2) | int %}              {# Na⁺ per half (= Ca²⁺ slots ×2) #}
 {%- set ca_slots = (total_charge / 4) | int %}              {# max Ca²⁺ per half #}
 {%- set side     = (total_charge / (2.0 * sigma)) ** 0.5 %} {# square box from electroneutrality 2σ·area = total_charge #}
@@ -65,10 +65,10 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  steps: {{ sweeps }}
+  steps: {{ steps }}
   collections:
     - !Stochastic
-      cycles: {{ total_charge }}      # trial moves per sweep
+      cycles: {{ total_charge }}      # trial moves per step
       moves:
         - !TranslateMolecule { molecule: na_lo, dp: {{ dp }}, weight: {{ k }} }
         - !TranslateMolecule { molecule: na_up, dp: {{ dp }}, weight: {{ k }} }
@@ -82,7 +82,7 @@ propagate:
             - ["na_up + na_up = ca_up", !dG {{ dG }}]
 
 analysis:
-  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ total_charge }} }
-  - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every {{ total_charge }} }
-  - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every {{ total_charge }} }
-  - !Energy { file: energy.dat, frequency: !Every {{ 100 * total_charge }} }
+  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every 1 }
+  - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every 1 }
+  - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every 1 }
+  - !Energy { file: energy.dat, frequency: !Every 100 }
