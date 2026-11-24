@@ -1849,6 +1849,13 @@ parser for better performance:</p>
 <p>When <code>use_com</code> is <code>true</code>, the expression is evaluated once per matching group at the mass
 center position, with <code>q</code> set to the net group charge.
 When <code>false</code> (default), the expression is evaluated at each matching atom position.</p>
+<p>The selection follows the system as it changes. Under titration, <code>atomtype HIS</code> gains and
+loses atoms as residues are deprotonated and protonated, and a molecule selection follows
+grand-canonical insertions and deletions.
+A selection that matches nothing at the start is reported at the info level
+when titration or insertion could still populate it.
+If no atom type or molecule in the topology can ever match it, as with a misspelled name,
+a warning says that the energy will always be zero.</p>
 <hr />
 <h2 id="custom-pair-potential-com-com">Custom Pair Potential (COM-COM)<a class="headerlink" href="#custom-pair-potential-com-com" title="Permanent link">&para;</a></h2>
 <p>The <code>!CustomPair</code> energy term applies a user-defined potential <code>U(r)</code> between the
