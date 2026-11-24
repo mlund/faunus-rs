@@ -150,4 +150,32 @@ impl Axes {
 
         Point::new(x, y, z)
     }
+
+    /// Reduce a vector to a scalar along the active axes.
+    ///
+    /// A single axis keeps the sign, so positions either side of the origin stay
+    /// distinct; several axes have no common direction, so give the Euclidean norm.
+    pub fn scalar_projection(&self, vector: Point) -> f64 {
+        match self {
+            Self::X => vector.x,
+            Self::Y => vector.y,
+            Self::Z => vector.z,
+            other => other.project(vector).norm(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scalar_projection_signed_for_one_axis_norm_otherwise() {
+        let v = Point::new(-3.0, 4.0, -12.0);
+        assert_eq!(Axes::X.scalar_projection(v), -3.0);
+        assert_eq!(Axes::Z.scalar_projection(v), -12.0);
+        assert_eq!(Axes::XY.scalar_projection(v), 5.0);
+        assert_eq!(Axes::XYZ.scalar_projection(v), 13.0);
+        assert_eq!(Axes::None.scalar_projection(v), 0.0);
+    }
 }

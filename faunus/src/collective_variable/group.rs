@@ -203,15 +203,7 @@ pub struct DipoleMoment {
 impl CvKind for DipoleMoment {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         group_dipole_moment(self.group, context)
-            .map(|mu| {
-                let filtered = self.projection.project(mu);
-                if self.projection.dimension() == 1 {
-                    // Single axis: return signed component
-                    filtered.x + filtered.y + filtered.z
-                } else {
-                    filtered.norm()
-                }
-            })
+            .map(|mu| self.projection.scalar_projection(mu))
             .unwrap_or(0.0)
     }
 
@@ -231,7 +223,8 @@ impl_single_group_with_dim_builder!(
 // MassCenterPosition
 // ---------------------------------------------------------------------------
 
-/// Position of the mass center of a group.
+/// Position of the mass center of a group: signed component for a single axis,
+/// Euclidean norm for several.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MassCenterPosition {
     #[serde(alias = "dimension")]
@@ -244,7 +237,7 @@ impl CvKind for MassCenterPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         context.groups()[self.group]
             .mass_center()
-            .map(|com| self.projection.project(*com).norm())
+            .map(|com| self.projection.scalar_projection(*com))
             .unwrap_or(0.0)
     }
 
@@ -264,7 +257,7 @@ impl_single_group_with_dim_builder!(
 // MassCenterSeparation (two groups)
 // ---------------------------------------------------------------------------
 
-/// Distance between mass centers of two groups.
+/// Distance between mass centers of two groups; a single axis gives |Δ|, not the sign.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MassCenterSeparation {
     #[serde(alias = "dimension")]
@@ -441,6 +434,23 @@ mod tests {
             group2: 0,
         };
         assert_eq!(cv.evaluate(&ctx), 0.0);
+    }
+
+    /// In a slit, |z| would fold the lower half of the box onto the upper half.
+    #[test]
+    fn mass_center_position_single_axis_is_signed() {
+        use crate::context::Context;
+        let mut ctx = make_context();
+        let (g, _) = mol2_group_indices(&ctx);
+        let com = *ctx.groups()[g].mass_center().unwrap();
+        let target = crate::Point::new(0.0, 0.0, -4.0);
+        ctx.translate_group(g, &(target - com)).unwrap();
+
+        let cv = MassCenterPosition {
+            projection: Axes::Z,
+            group: g,
+        };
+        assert!((cv.evaluate(&ctx) + 4.0).abs() < 1e-10);
     }
 
     #[test]

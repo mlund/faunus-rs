@@ -122,8 +122,8 @@ Property                 | Selection       | Description
 `end_to_end`             | one group       | End-to-end distance of a molecular group
 `gyration_radius`        | one group       | Radius of gyration (default `xyz` = full Rg; single axis gives spread along it)
 `dipole_moment`          | one group       | Electric dipole moment (default `xyz` = magnitude; single axis gives signed component)
-`mass_center_position`   | one group       | Mass center position along `projection`
-`mass_center_separation` | two groups      | Distance between two group mass centers
+`mass_center_position`   | one group       | Mass center position: signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis
+`mass_center_separation` | two groups      | Distance between two group mass centers; unsigned, also for a single axis
 `dipole_product`         | two groups      | Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default `xyz` = full 3D; `projection` filters dipoles before comparing)
 
 ---
