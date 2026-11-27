@@ -520,6 +520,85 @@ No additional `energy:` section is needed — the term is created automatically.
 
 ---
 
+## Slit electrostatics: charge outside the box
+
+A `!Slit` is periodic in $x$ and $y$, so the pair Coulomb sum sees only the charges inside
+each particle's minimum-image square. A charged surface, however, is laterally infinite.
+Without the charge beyond the square, a wall is under-screened from afar and counterions
+spread into the bulk instead of forming a double layer. `!Akesson` adds this missing
+charge as a mean field
+([Torrie & Valleau, 1980](https://doi.org/10.1063/1.440065);
+[Greberg, Kjellander & Åkesson, 1996](https://doi.org/10.1080/00268979600100271)).
+
+The term averages all charges laterally into slabs of width $\Delta z$, giving the running
+mean areal charge density $\sigma(z_j)$ of slab $j$. Each charge $q_i$ at height $z_i$ then
+feels the potential of the charge outside the box,
+
+$$U = k_BT \sum_i q_i\,\varphi_\text{ext}(z_i), \qquad
+\varphi_\text{ext}(z) = \sum_j \sigma(z_j)\, g(|z - z_j|),$$
+
+where $g$ is the potential of an infinite sheet of unit areal charge minus that of the
+central square of half-width $a = L_x/2$ (Greberg et al., Eq. 15):
+
+$$g(z) = l_B\left[-2\pi z
+  - 8a \ln\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
+  + 2z\left(\frac{\pi}{2} + \arcsin\frac{a^4-z^4-2a^2z^2}{(a^2+z^2)^2}\right)\right].$$
+
+Here $l_B$ is the Bjerrum length; $\varphi_\text{ext}$ is linear between slab centres. The
+exterior charge enters only through its lateral average, so ion–ion correlations reach no
+farther than the box: the lateral box must be large compared with the correlation length.
+
+### Requirements
+
+These are checked at start-up:
+
+- a `!Slit` cell with a square base, $L_x = L_y$;
+- plain `!Coulomb` for every pair of charged atom kinds, with a cutoff (and any spline or
+  group cutoff) of at least the minimum-image span $\sqrt{L_x^2/4 + L_y^2/4 + L_z^2}$;
+- no Debye screening, from either `medium.salt` or a pair `debye_length`;
+- constant volume: a committed volume move stops the run;
+- no [Electric Potential Profile](analysis.md#electric-potential-profile) with
+  `finite_box_correction: true`, which would remove the exterior charge again.
+
+### Equilibrate, then produce
+
+With `update: !Every N`, the term samples $\sigma(z)$ every MC step, recomputes
+$\varphi_\text{ext}$ every $N$ steps, and rewrites `file`. Each refresh changes the energy
+outside any move; the energy-drift check accounts for this. Run until $\sigma(z)$ stops
+changing, then switch to `update: Fixed` for production: the profile is loaded once and never
+changed. `Fixed` without a sampled profile is an error. Wang–Landau and umbrella sampling
+assume a fixed energy landscape and accept only `Fixed`.
+
+`file` is a CSV with columns `z/Å`, `σ/e·Å⁻²` and `samples`. A relative path is resolved
+next to the state file (`-s`), so a restart continues the same profile; in a Gibbs ensemble
+each box keeps its own, prefixed `box0_` and `box1_`. Umbrella and Wang–Landau read it from
+the state directory, and `rerun` from the working directory. A profile from a different
+`resolution` or box height is rejected.
+
+### YAML configuration
+
+```yaml
+system:
+  cell: !Slit [50.0, 50.0, 100.0]
+  energy:
+    - !Nonbonded
+      default:
+        - !Coulomb {cutoff: 500.0}   # ≥ minimum-image span
+        - !WCA {mixing: LB}
+    - !Akesson
+      resolution: 0.5      # slab width Δz (Å)
+      file: akesson.csv    # σ(z), next to the state file
+      update: !Every 100   # equilibration; use `Fixed` for production
+```
+
+Key          | Required | Description
+------------ | -------- | -----------
+`resolution` | yes      | Slab width $\Delta z$ (Å)
+`file`       | yes      | $\sigma(z)$ profile: loaded if present; rewritten on each refresh with `!Every`
+`update`     | yes      | `!Every N`: sample every step, refresh every $N$ steps. `Fixed`: load only
+
+---
+
 ## Bonded Interactions
 
 Bonded energy terms are automatically added to the Hamiltonian based on the

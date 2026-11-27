@@ -1,0 +1,1047 @@
+particles:
+- atom_id: 0
+  pos:
+  - -20.0
+  - -15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -10.0
+  - -15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 0.0
+  - -15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 10.0
+  - -15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 20.0
+  - -15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -20.0
+  - -5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -10.0
+  - -5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 0.0
+  - -5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 10.0
+  - -5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 20.0
+  - -5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -20.0
+  - 5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -10.0
+  - 5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 0.0
+  - 5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 10.0
+  - 5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 20.0
+  - 5.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -20.0
+  - 15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - -10.0
+  - 15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 0.0
+  - 15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 10.0
+  - 15.0
+  - -49.0
+- atom_id: 0
+  pos:
+  - 20.0
+  - 15.0
+  - -49.0
+- atom_id: 1
+  pos:
+  - -9.406212844221985
+  - 10.466658986207847
+  - -47.573516882499035
+- atom_id: 1
+  pos:
+  - -18.51205721861698
+  - 11.01313779968022
+  - -49.57365300924933
+- atom_id: 1
+  pos:
+  - 16.66017620296821
+  - -12.349018458886688
+  - 48.50085489563121
+- atom_id: 1
+  pos:
+  - -10.174753373145947
+  - 1.6922563621888225
+  - -47.51203749153441
+- atom_id: 1
+  pos:
+  - 3.0104874569785753
+  - 11.10036124811883
+  - -47.197010396650064
+- atom_id: 1
+  pos:
+  - 13.775849346478246
+  - -23.389902894102896
+  - -49.58139768087142
+- atom_id: 1
+  pos:
+  - 5.696573008277588
+  - -16.303983065917414
+  - -10.678247208013717
+- atom_id: 1
+  pos:
+  - 21.53393967998807
+  - -20.9698863029708
+  - -49.72156884356039
+- atom_id: 1
+  pos:
+  - -22.96323505712884
+  - -18.609816242234963
+  - -37.31754612073054
+- atom_id: 1
+  pos:
+  - 3.4918840177667536
+  - -21.510664180806174
+  - -35.79204816493126
+- atom_id: 1
+  pos:
+  - 24.716171572374776
+  - -6.211218299204539
+  - -47.875046042807725
+- atom_id: 1
+  pos:
+  - 8.870813134800379
+  - 13.011021685539177
+  - 13.179342175662548
+- atom_id: 1
+  pos:
+  - -23.07018361356658
+  - -14.108149113343915
+  - -44.96160840863261
+- atom_id: 1
+  pos:
+  - -23.10646768118103
+  - 5.1076077517194785
+  - 0.5850773165334204
+- atom_id: 1
+  pos:
+  - 3.0545844160572777
+  - -24.32235928808006
+  - -8.128681994470435
+- atom_id: 1
+  pos:
+  - 15.636830104422584
+  - 5.987059907179042
+  - -48.768375558412934
+- atom_id: 1
+  pos:
+  - -14.049371149972323
+  - -14.69998028363218
+  - 24.150884468976184
+- atom_id: 1
+  pos:
+  - -6.8564087564002
+  - 23.559872321537988
+  - -3.0186411586327297
+- atom_id: 1
+  pos:
+  - 12.607581542393557
+  - 2.8385740813881046
+  - 23.080618454533642
+- atom_id: 1
+  pos:
+  - 12.316158747268238
+  - 0.9782896646516742
+  - -12.926943856460223
+- atom_id: 1
+  pos:
+  - 3.2977041191775465
+  - 19.81163962618078
+  - 42.686186664905485
+- atom_id: 1
+  pos:
+  - 16.632822326226876
+  - -17.442744180610553
+  - -43.04932572318684
+- atom_id: 1
+  pos:
+  - -6.4819553359588795
+  - 0.39458834453128977
+  - -49.91707209642526
+- atom_id: 1
+  pos:
+  - -22.591634402522427
+  - 11.822987743499588
+  - -49.450425773528124
+- atom_id: 1
+  pos:
+  - -24.742401305068345
+  - 24.14910807042759
+  - -39.336417067393626
+- atom_id: 1
+  pos:
+  - -4.041138399845286
+  - -22.855185052760405
+  - -18.05131802475222
+- atom_id: 1
+  pos:
+  - 4.672514765793688
+  - -5.093887035029507
+  - -48.98414690527943
+- atom_id: 1
+  pos:
+  - -17.654742333030104
+  - -3.6679128322388563
+  - 13.799950013871626
+- atom_id: 1
+  pos:
+  - -5.465383671927597
+  - -6.530345176298115
+  - -19.198842320282726
+- atom_id: 1
+  pos:
+  - 19.637070184003758
+  - -5.204264576648696
+  - 45.85536972644697
+- atom_id: 1
+  pos:
+  - -16.704329258056074
+  - 17.93156149728335
+  - -25.768947103696217
+- atom_id: 1
+  pos:
+  - 4.9874776104626
+  - 18.251130692222716
+  - -45.687302276725035
+- atom_id: 1
+  pos:
+  - 19.20414036958052
+  - 2.715372624305788
+  - 39.20626777099628
+- atom_id: 1
+  pos:
+  - 3.4795989630143374
+  - -10.833224745556315
+  - -32.84605877765637
+- atom_id: 1
+  pos:
+  - -18.051545654542196
+  - 0.040302391315830965
+  - -45.50057290688189
+- atom_id: 1
+  pos:
+  - -8.216589267744709
+  - -11.904127507750378
+  - 34.58490730203547
+- atom_id: 1
+  pos:
+  - -6.907014070115546
+  - 13.446593074784802
+  - -33.008709431025025
+- atom_id: 1
+  pos:
+  - -6.375143600729784
+  - -23.69868170925104
+  - -47.85363445864262
+- atom_id: 1
+  pos:
+  - -1.6047231259021004
+  - 13.940527847747171
+  - 47.70874751273102
+- atom_id: 1
+  pos:
+  - -14.23680529684993
+  - 15.831667975823187
+  - 48.79884994685757
+- atom_id: 2
+  pos:
+  - -24.750643615797777
+  - -2.9853393970966593
+  - 42.68536620147068
+- atom_id: 2
+  pos:
+  - -7.612740744223967
+  - 3.660582164043798
+  - 23.5796550520945
+- atom_id: 2
+  pos:
+  - 0.44881349294058726
+  - 15.519721999932777
+  - 15.967532404352292
+- atom_id: 2
+  pos:
+  - -5.910200077338004
+  - 18.219704719546097
+  - -0.5342532744098012
+- atom_id: 2
+  pos:
+  - 10.17930547637996
+  - 11.51487682838831
+  - -30.432172891994515
+- atom_id: 2
+  pos:
+  - -24.8899051235771
+  - -10.792887275578494
+  - 43.50174686458884
+- atom_id: 2
+  pos:
+  - -14.225643190761565
+  - 9.699880890144401
+  - 47.667890726394354
+- atom_id: 2
+  pos:
+  - -16.935832354003793
+  - 1.2380833968927805
+  - 8.539532858951137
+- atom_id: 2
+  pos:
+  - -13.485765508510674
+  - 19.289934978276623
+  - 45.493180811585425
+- atom_id: 2
+  pos:
+  - 17.701128244099415
+  - -23.3360409688993
+  - -4.046528501405846
+- atom_id: 2
+  pos:
+  - 16.099484876702775
+  - -3.6806180684622953
+  - 44.33960414039056
+- atom_id: 2
+  pos:
+  - -8.633422726086089
+  - 0.4542501126833042
+  - 43.05632057002336
+- atom_id: 2
+  pos:
+  - -8.777061094245312
+  - -9.66534568313196
+  - 11.424654752457439
+- atom_id: 2
+  pos:
+  - 7.626946371277745
+  - 13.359311018124286
+  - 25.88470648230558
+- atom_id: 2
+  pos:
+  - 2.234613225952765
+  - -24.372230266173876
+  - 24.30639910375026
+- atom_id: 2
+  pos:
+  - -5.263666302067649
+  - -24.257584584560995
+  - 47.2929202900597
+- atom_id: 2
+  pos:
+  - -19.908712023181984
+  - -7.128869923103911
+  - -3.769325747457806
+- atom_id: 2
+  pos:
+  - 4.540898840400538
+  - -15.109638875640917
+  - 13.097662796546091
+- atom_id: 2
+  pos:
+  - 15.745246429820508
+  - -23.297374011337062
+  - 14.556584624397688
+- atom_id: 2
+  pos:
+  - 16.828687595493538
+  - -13.340731539444484
+  - 24.580187783108183
+cell: !Slit
+- 50.0
+- 50.0
+- 100.0
+groups:
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 0
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 1
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- molecule: 2
+  capacity: 1
+  size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+step: 200

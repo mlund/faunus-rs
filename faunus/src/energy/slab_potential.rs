@@ -76,6 +76,14 @@ fn lateral_shape(cell: &Cell) -> Result<(f64, LateralShape)> {
     }
 }
 
+/// Full width `2a` of a square base (Lx = Ly); errors for any other cross-section.
+pub(crate) fn square_base_width(cell: &Cell) -> Result<f64> {
+    match lateral_shape(cell)? {
+        (width, LateralShape::Square) => Ok(width),
+        (_, LateralShape::Disk) => anyhow::bail!("a square base is required, not a disk"),
+    }
+}
+
 /// Geometry factor of a uniformly charged **square** sheet of half-width `b`, on the axis at
 /// perpendicular distance `x`: `arcsin[(b⁴ − x⁴ − 2b²x²)/(b²+x²)²] + π/2`. It is `π` at contact
 /// (`x = 0`, the infinite-sheet limit) and decays to `0` as `x → ∞`.
@@ -182,10 +190,7 @@ impl SlabGrid {
                 "the unscreened (Greberg) finite-box correction requires a square base, not a cylinder"
             );
         }
-        let table = (0..self.n_bins())
-            .map(|k| self.finite_box_correction(k as f64 * self.bin_width()))
-            .collect();
-        self.correction = Some(table);
+        self.correction = Some(self.correction_table());
         Ok(self)
     }
 
@@ -195,6 +200,11 @@ impl SlabGrid {
 
     pub(crate) fn bin_width(&self) -> f64 {
         self.grid.bin_width()
+    }
+
+    /// Smallest lateral dimension (Å): the full width of a square base.
+    pub(crate) const fn lateral_extent(&self) -> f64 {
+        self.lateral_extent
     }
 
     /// Lateral cross-sectional area (Å²).
@@ -239,20 +249,46 @@ impl SlabGrid {
             // `−2π·l_B·|dz|` is not separable ⇒ direct O(n²) convolution.
             SlabKernel::Unscreened { .. } => self.direct_profile(slab_charges),
         };
-        // Subtract the finite-box correction φ_box = φ_∞ − φ_ext, when enabled. The correction
-        // kernel is not separable, so this is a direct O(n²) convolution over the cached table.
+        // φ_box = φ_∞ − φ_ext, when the correction is enabled.
         if let Some(table) = &self.correction {
-            for (i, phi_i) in phi.iter_mut().enumerate() {
-                // φ_ext depends only on slab separation, so index the table by |i − j|.
-                let exterior: f64 = slab_charges
-                    .iter()
-                    .enumerate()
-                    .map(|(j, &charge)| charge / self.area() * table[i.abs_diff(j)])
-                    .sum();
-                *phi_i -= exterior;
-            }
+            let exterior = self.convolve_exterior(slab_charges, table);
+            phi.iter_mut().zip(exterior).for_each(|(p, e)| *p -= e);
         }
         phi
+    }
+
+    /// Potential φ_ext(zᵢ) of the charge outside the minimum-image cross-section, from per-slab
+    /// total charges. This is the external field of the Åkesson mean-field correction.
+    ///
+    /// Uses the cached table when the correction is enabled; otherwise tabulates it here, which
+    /// is O(n) next to the O(n²) convolution.
+    pub(crate) fn exterior_profile(&self, slab_charges: &[f64]) -> Vec<f64> {
+        match &self.correction {
+            Some(table) => self.convolve_exterior(slab_charges, table),
+            None => self.convolve_exterior(slab_charges, &self.correction_table()),
+        }
+    }
+
+    fn correction_table(&self) -> Vec<f64> {
+        (0..self.n_bins())
+            .map(|k| self.finite_box_correction(k as f64 * self.bin_width()))
+            .collect()
+    }
+
+    /// Direct O(n²) sum: the correction kernel is not separable. φ_ext depends only on slab
+    /// separation, so the table is indexed by |i − j|.
+    fn convolve_exterior(&self, slab_charges: &[f64], table: &[f64]) -> Vec<f64> {
+        debug_assert_eq!(slab_charges.len(), self.n_bins());
+        let inv_area = 1.0 / self.area();
+        (0..self.n_bins())
+            .map(|i| {
+                slab_charges
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &charge)| charge * inv_area * table[i.abs_diff(j)])
+                    .sum()
+            })
+            .collect()
     }
 
     /// Finite-box external correction φ_ext at axial separation `dz`, per unit areal charge.
@@ -332,6 +368,23 @@ impl SlabGrid {
             })
             .collect()
     }
+}
+
+/// −2π·l_B·z − l_B·∫∫_box 1/r: potential of the charge outside a 2a square, per unit σ, by
+/// direct midpoint quadrature. An independent reference for the closed-form kernel.
+#[cfg(test)]
+pub(crate) fn brute_force_exterior(bjerrum: f64, a: f64, dz: f64) -> f64 {
+    let m = 800;
+    let h = 2.0 * a / m as f64;
+    let mut sum = 0.0;
+    for ix in 0..m {
+        let x = -a + (ix as f64 + 0.5) * h;
+        for iy in 0..m {
+            let y = -a + (iy as f64 + 0.5) * h;
+            sum += 1.0 / (x * x + y * y + dz * dz).sqrt();
+        }
+    }
+    -2.0 * PI * bjerrum * dz.abs() - bjerrum * sum * h * h
 }
 
 #[cfg(test)]
@@ -615,23 +668,39 @@ mod tests {
             SlabKernel::unscreened(bjerrum),
         )
         .unwrap();
-        let m = 800;
-        let h = 2.0 * a / m as f64;
-        let mut sum = 0.0;
-        for ix in 0..m {
-            let x = -a + (ix as f64 + 0.5) * h;
-            for iy in 0..m {
-                let y = -a + (iy as f64 + 0.5) * h;
-                sum += 1.0 / (x * x + y * y + dz * dz).sqrt();
-            }
-        }
-        let phi_box = bjerrum * sum * h * h;
-        let expected = -2.0 * PI * bjerrum * dz - phi_box;
+        let expected = brute_force_exterior(bjerrum, a, dz);
         let got = grid.finite_box_correction(dz);
         assert!(
             (got - expected).abs() / expected.abs() < 1e-2,
             "got {got} vs {expected}"
         );
+    }
+
+    #[test]
+    fn exterior_profile_of_one_slab_matches_exterior_integral() {
+        // One slab of charge Q: φ_ext(zᵢ) = (Q/area)·g(|zᵢ − zⱼ|), with g from the brute-force
+        // exterior integral. Catches area normalisation, sign, and |i − j| table indexing.
+        let (bjerrum, a, charge) = (7.0, 10.0, 3.0);
+        let grid = SlabGrid::from_cell(
+            &Cell::Cuboid(Cuboid::new(2.0 * a, 2.0 * a, 40.0)),
+            1.0,
+            SlabKernel::unscreened(bjerrum),
+        )
+        .unwrap();
+        let source = 10;
+        let mut charges = vec![0.0; grid.n_bins()];
+        charges[source] = charge;
+        let phi = grid.exterior_profile(&charges);
+        let sigma = charge / (4.0 * a * a);
+        for target in [source, source + 3, source - 5] {
+            let dz = grid.bin_center(target) - grid.bin_center(source);
+            let expected = sigma * brute_force_exterior(bjerrum, a, dz.abs());
+            assert!(
+                (phi[target] - expected).abs() < 1e-2 * expected.abs(),
+                "bin {target}: {} vs {expected}",
+                phi[target]
+            );
+        }
     }
 
     #[test]

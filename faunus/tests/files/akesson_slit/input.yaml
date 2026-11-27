@@ -1,0 +1,61 @@
+# Åkesson mean-field correction: 20 fixed −1 wall charges at z = −49 Å, their 20 Na⁺
+# counterions and 20 NaCl pairs in a 50×50×100 Å slit. Pair Coulomb spans the whole
+# minimum-image box, so the Greberg kernel applies; the field refreshes every 10 steps and
+# its work is booked, so the energy drift stays at round-off. Pins the refresh path.
+atoms:
+  - {name: W, charge: -1.0, sigma: 4.0, epsilon: 0.5, mass: 1.0}
+  - {name: Na, charge: 1.0, sigma: 4.0, epsilon: 0.5, mass: 23.0}
+  - {name: Cl, charge: -1.0, sigma: 4.0, epsilon: 0.5, mass: 35.0}
+molecules:
+  - {name: wall, atoms: [W]}
+  - {name: na, atoms: [Na]}
+  - {name: cl, atoms: [Cl]}
+
+system:
+  cell: !Slit [50.0, 50.0, 100.0]
+  medium: {permittivity: !Fixed 78.4, temperature: 298.15}
+  energy:
+    - !Nonbonded
+      default:
+        - !Coulomb {cutoff: 500.0}
+        - !WCA {mixing: LB}
+    - !Akesson {resolution: 1.0, file: akesson.csv, update: !Every 10}
+  blocks:
+    - molecule: wall
+      N: 20
+      insert: !Manual
+        - [-20.0, -15.0, -49.0]
+        - [-10.0, -15.0, -49.0]
+        - [0.0, -15.0, -49.0]
+        - [10.0, -15.0, -49.0]
+        - [20.0, -15.0, -49.0]
+        - [-20.0, -5.0, -49.0]
+        - [-10.0, -5.0, -49.0]
+        - [0.0, -5.0, -49.0]
+        - [10.0, -5.0, -49.0]
+        - [20.0, -5.0, -49.0]
+        - [-20.0, 5.0, -49.0]
+        - [-10.0, 5.0, -49.0]
+        - [0.0, 5.0, -49.0]
+        - [10.0, 5.0, -49.0]
+        - [20.0, 5.0, -49.0]
+        - [-20.0, 15.0, -49.0]
+        - [-10.0, 15.0, -49.0]
+        - [0.0, 15.0, -49.0]
+        - [10.0, 15.0, -49.0]
+        - [20.0, 15.0, -49.0]
+    - {molecule: na, N: 40, insert: !RandomAtomPos {directions: xyz}}
+    - {molecule: cl, N: 20, insert: !RandomAtomPos {directions: xyz}}
+
+analysis:
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  steps: 200
+  collections:
+    - !Stochastic
+      cycles: 60
+      moves:
+        - !TranslateMolecule {molecule: na, dp: 4.0, weight: 2}
+        - !TranslateMolecule {molecule: cl, dp: 4.0, weight: 1}

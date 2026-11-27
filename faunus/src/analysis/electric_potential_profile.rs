@@ -29,7 +29,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::energy::slab_potential::{SlabGrid, SlabKernel};
 use crate::selection::{Atoms, CachedSelection, Selection};
-use crate::ObserveContext;
+use crate::{ObserveContext, WithHamiltonian};
 use anyhow::Result;
 use derive_more::Debug;
 use interatomic::coulomb::{DebyeLength, Medium, Temperature};
@@ -89,9 +89,16 @@ impl ElectricPotentialProfileBuilder {
     /// Debye screening length; the screened kernel is undefined without finite ionic strength.
     pub fn build(
         &self,
-        context: &impl ObserveContext,
+        context: &(impl ObserveContext + WithHamiltonian),
         medium: Option<&Medium>,
     ) -> Result<ElectricPotentialProfile> {
+        if self.finite_box_correction && context.hamiltonian().akesson().is_some() {
+            // The simulated system already includes the exterior charge, through !Akesson.
+            anyhow::bail!(
+                "finite_box_correction would remove the exterior charge that !Akesson adds; \
+                 drop one of them"
+            );
+        }
         if self.resolution <= 0.0 {
             anyhow::bail!("resolution must be positive");
         }
@@ -708,6 +715,32 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
         }
         .build(context, Some(&medium))
         .unwrap()
+    }
+
+    #[test]
+    fn finite_box_correction_is_refused_alongside_the_akesson_field() {
+        // With the Åkesson term the simulated system already has the exterior charge, so
+        // subtracting it again would report the potential of a system that was not simulated.
+        let yaml = IONS
+            .replace("!Cuboid [20.0, 20.0, 20.0]", "!Slit [20.0, 20.0, 20.0]")
+            .replace(
+                "  energy: []",
+                "  energy:\n    - !Nonbonded {default: [!Coulomb {cutoff: 1000.0}]}\n    \
+                 - !Akesson {resolution: 1.0, file: unused.csv, update: Fixed}",
+            );
+        let context = Backend::from_yaml_str(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let medium = get_medium_str(&yaml).unwrap();
+        let builder = |finite_box_correction| ElectricPotentialProfileBuilder {
+            selection: all_atoms(),
+            resolution: 1.0,
+            finite_box_correction,
+            zeta_threshold: None,
+            file: "unused.csv".into(),
+            frequency: Frequency::Every(1),
+        };
+        let err = builder(true).build(&context, Some(&medium)).unwrap_err();
+        assert!(err.to_string().contains("Akesson"), "{err}");
+        assert!(builder(false).build(&context, Some(&medium)).is_ok());
     }
 
     #[test]

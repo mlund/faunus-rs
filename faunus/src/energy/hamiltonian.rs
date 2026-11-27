@@ -436,6 +436,62 @@ impl Hamiltonian {
         Ok(())
     }
 
+    /// Let terms that adapt during a run do so, once per step, between moves. Returns the
+    /// energy change this caused (kJ/mol): external work that no move's ΔU accounts for.
+    pub(crate) fn advance(
+        &mut self,
+        context: &impl ObserveContext,
+        step: usize,
+    ) -> anyhow::Result<f64> {
+        self.akesson_mut()
+            .map_or(Ok(0.0), |a| a.advance(context, step))
+    }
+
+    /// Error if [`advance`](Self::advance) can change the energy landscape during a run, which
+    /// `sampler` (Wang–Landau, umbrella) assumes fixed.
+    pub(crate) fn ensure_fixed_landscape(&self, sampler: &str) -> anyhow::Result<()> {
+        if self.is_adaptive() {
+            anyhow::bail!(
+                "{sampler} needs a fixed energy landscape, but !Akesson refreshes its field \
+                 during the run; equilibrate σ(z) in a plain run, then use `update: Fixed`"
+            );
+        }
+        Ok(())
+    }
+
+    /// True if [`advance`](Self::advance) can change the energy landscape during a run.
+    pub(crate) fn is_adaptive(&self) -> bool {
+        self.akesson().is_some_and(super::Akesson::is_adaptive)
+    }
+
+    /// Resolve energy-term files given relative to the run (the Åkesson σ(z) profile) in
+    /// `dir`, `box{i}_`-prefixed for a Gibbs box, and reload them.
+    pub(crate) fn anchor_files(
+        &mut self,
+        dir: &std::path::Path,
+        box_index: Option<usize>,
+    ) -> anyhow::Result<()> {
+        self.akesson_mut()
+            .map_or(Ok(()), |a| a.anchor(dir, box_index))
+    }
+
+    /// The Åkesson mean-field term, if present (`!Akesson` is unique).
+    pub(crate) fn akesson(&self) -> Option<&super::Akesson> {
+        #[allow(clippy::wildcard_enum_match_arm)] // searching specifically for the Åkesson term
+        self.energy_terms.iter().find_map(|t| match t {
+            EnergyTerm::Akesson(a) => Some(a),
+            _ => None,
+        })
+    }
+
+    fn akesson_mut(&mut self) -> Option<&mut super::Akesson> {
+        #[allow(clippy::wildcard_enum_match_arm)] // searching specifically for the Åkesson term
+        self.energy_terms.iter_mut().find_map(|t| match t {
+            EnergyTerm::Akesson(a) => Some(a),
+            _ => None,
+        })
+    }
+
     /// Save backups of all energy terms for later undo.
     ///
     /// Call before applying a move so that terms like Ewald can snapshot
@@ -601,6 +657,17 @@ impl Hamiltonian {
                 );
             }
             self.push(tab.into());
+        }
+        if let Some(akesson_builder) = builder.akesson() {
+            let medium = medium
+                .ok_or_else(|| anyhow::anyhow!("Åkesson requires a medium with permittivity"))?;
+            let scheme = builder
+                .nonbonded()
+                .map(|nb| nb.coulomb_scheme(context.topology_ref().atomkinds(), Some(medium)))
+                .transpose()?
+                .flatten();
+            let term = super::Akesson::new(akesson_builder, context, medium, scheme.as_ref())?;
+            self.push(term.into());
         }
         if let Some(ewald_builder) = builder.ewald() {
             let medium = medium

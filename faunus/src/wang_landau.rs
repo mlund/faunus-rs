@@ -161,6 +161,8 @@ impl WangLandau {
             &mut crate::propagate::setup_rng_from_file(input)?,
         )?;
 
+        crate::WithHamiltonian::hamiltonian(&base_context).ensure_fixed_landscape("Wang–Landau")?;
+
         // Verify CVs resolve against the base context (catches selection errors early)
         config.coordinate.build_cv(&base_context)?;
         if let Some(ref cv2) = config.coordinate2 {
@@ -191,6 +193,9 @@ impl WangLandau {
         let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
 
         std::fs::create_dir_all(state_dir)?;
+
+        // A relative σ(z) profile (Fixed only here) is shared by every walker, from the state dir.
+        crate::WithHamiltonianMut::hamiltonian_mut(&base_context).anchor_files(state_dir, None)?;
 
         // Restore or create shared state
         let hist_path = histogram_path(state_dir);

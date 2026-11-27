@@ -14,6 +14,7 @@
 
 //! # Energy calculation and Hamiltonian
 
+pub(crate) mod akesson;
 mod backup;
 pub(crate) mod bonded;
 pub(crate) mod builder;
@@ -45,6 +46,7 @@ pub(crate) mod stateful;
 mod tabulated;
 mod template;
 
+pub use akesson::{Akesson, AkessonBuilder, AkessonUpdate};
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
 pub use constrain::{Constrain, ConstrainBuilder, Restraint};

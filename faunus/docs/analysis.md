@@ -837,8 +837,8 @@ This disk expression is the potential *on the cylinder axis* — the on-axis pot
 uniformly charged disk of radius $R$ — rather than a laterally-averaged cross-section, so for a
 cylinder the correction is exact on-axis and approximate off it. Both forms vanish as the
 cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the correction matters
-only for thin boxes. Enable it only when the simulation itself does not
-already apply such an external correction, otherwise the far field is subtracted twice.
+only for thin boxes. With [`!Akesson`](energy.md#slit-electrostatics-charge-outside-the-box)
+the simulation already includes the charge outside the box, so the two cannot be combined.
 
 For the unscreened (bare-Coulomb) kernel the correction reduces to Greberg's original
 square-base form,
