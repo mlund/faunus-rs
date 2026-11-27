@@ -38,6 +38,7 @@ use interatomic::{
 use serde::{Deserialize, Serialize};
 use unordered_pair::UnorderedPair;
 
+use super::akesson::AkessonBuilder;
 use super::constrain::ConstrainBuilder;
 use super::contact_tessellation::ContactTessellationEnergyBuilder;
 use super::custom_external::CustomExternalBuilder;
@@ -260,6 +261,40 @@ impl PairInteraction {
             Self::CoulombFanourgakis(_) => "CoulombFanourgakis",
             Self::CustomPotential(_) => "CustomPotential",
         }
+    }
+
+    /// What the Åkesson kernel choice needs from a Coulomb variant; `None` for short-range ones.
+    /// The scheme's own screening wins over the medium's, as in [`Self::make_ionion`].
+    fn coulomb_scheme(
+        &self,
+        medium_kappa: Option<f64>,
+        range_limit: f64,
+    ) -> Option<super::akesson::CoulombScheme> {
+        use super::akesson::{CoulombScheme, CoulombSchemeKind};
+        use interatomic::coulomb::{Cutoff, DebyeLength};
+        let (cutoff, kappa) = match self {
+            Self::CoulombPlain(s) => (s.cutoff(), s.kappa()),
+            Self::CoulombEwald(s) => (s.cutoff(), s.kappa()),
+            Self::CoulombRealSpaceEwald(s) => (s.cutoff(), s.kappa()),
+            Self::CoulombReactionField(s) => (s.cutoff(), s.kappa()),
+            Self::CoulombFanourgakis(s) => (s.cutoff(), s.kappa()),
+            Self::AshbaughHatch(_)
+            | Self::KimHummer(_)
+            | Self::LennardJones(_)
+            | Self::WeeksChandlerAndersen(_)
+            | Self::HardSphere(_)
+            | Self::CustomPotential(_) => return None,
+        };
+        let kind = if matches!(self, Self::CoulombPlain(_)) {
+            CoulombSchemeKind::Plain
+        } else {
+            CoulombSchemeKind::Other(self.name())
+        };
+        Some(CoulombScheme {
+            kind,
+            cutoff: cutoff.min(range_limit),
+            kappa: kappa.or(medium_kappa),
+        })
     }
 
     /// True if this variant is an electrostatic interaction.
@@ -686,6 +721,48 @@ impl PairPotentialBuilder {
         Ok(PairPot::from_parts(short_range, coulomb))
     }
 
+    /// The one Coulomb scheme every charged atom-kind pair resolves to, with the range the pair
+    /// sum actually covers: the scheme cutoff, clipped by any spline or culling cutoff.
+    ///
+    /// `None` without charged kinds. Errors if a charged pair has no Coulomb, several, or one
+    /// that differs from the rest: a single mean field cannot complement mixed schemes.
+    pub(crate) fn coulomb_scheme(
+        &self,
+        atomkinds: &[AtomKind],
+        medium: Option<&interatomic::coulomb::Medium>,
+    ) -> anyhow::Result<Option<super::akesson::CoulombScheme>> {
+        let charged: Vec<&AtomKind> = atomkinds.iter().filter(|a| a.charge() != 0.0).collect();
+        let medium_kappa = medium.and_then(|m| m.debye_length()).map(f64::recip);
+        let range_limit = self
+            .spline
+            .as_ref()
+            .map(|s| s.cutoff)
+            .into_iter()
+            .chain(self.cutoff)
+            .fold(f64::INFINITY, f64::min);
+        let mut shared: Option<super::akesson::CoulombScheme> = None;
+        for (i, a) in charged.iter().enumerate() {
+            for b in &charged[i..] {
+                let pair = || format!("{}–{}", a.name(), b.name());
+                let scheme = match self.resolve_interactions(a, b, PairInteraction::is_coulomb)[..]
+                {
+                    [single] => single.coulomb_scheme(medium_kappa, range_limit),
+                    [] => anyhow::bail!("charged pair {} has no Coulomb interaction", pair()),
+                    _ => anyhow::bail!("charged pair {} has several Coulomb interactions", pair()),
+                };
+                match &shared {
+                    None => shared = scheme,
+                    Some(first) if Some(first) != scheme.as_ref() => anyhow::bail!(
+                        "charged pair {} uses {scheme:?}, but other pairs use {first:?}",
+                        pair()
+                    ),
+                    Some(_) => {}
+                }
+            }
+        }
+        Ok(shared)
+    }
+
     /// True if any configured interaction is a Coulomb variant.
     pub(crate) fn has_coulomb(&self) -> bool {
         self.default
@@ -820,6 +897,8 @@ pub enum EnergyTermBuilder {
     Tabulated3d(Tabulated3DBuilder),
     /// Static flat-histogram bias loaded from a Wang-Landau checkpoint.
     Penalty(PenaltyBuilder),
+    /// Mean field of the charge outside a slit's minimum-image box.
+    Akesson(AkessonBuilder),
 }
 
 /// Generate `EnergyTermBuilder::kind` and the by-kind accessors on
@@ -892,6 +971,7 @@ energy_dispatch! {
     Tabulated6d         => unique tabulated6d          : Tabulated6DBuilder,
     Tabulated3d         => unique tabulated3d          : Tabulated3DBuilder,
     Penalty             => unique penalty              : PenaltyBuilder,
+    Akesson             => unique akesson              : AkessonBuilder,
 }
 
 impl HamiltonianBuilder {

@@ -443,6 +443,8 @@ pub struct MarkovChain<T: Context> {
     thermal_energy: f64,
     /// Collection of analyses to perform during the simulation.
     analyses: AnalysisCollection<T>,
+    /// Energy changed by adaptive terms between steps (kJ/mol); no move's ΔU holds it.
+    adaptation_work: f64,
 }
 
 impl<T: Context> MarkovChain<T> {
@@ -483,6 +485,10 @@ impl<T: Context> MarkovChain<T> {
             return Ok(false);
         }
         self.step += 1;
+        self.adaptation_work += self
+            .context
+            .hamiltonian_mut()
+            .advance(&self.context, self.step)?;
         self.analyses.sample(&self.context, self.step)?;
         Ok(true)
     }
@@ -501,6 +507,7 @@ impl<T: Context + 'static> MarkovChain<T> {
             step: 0,
             propagate,
             analyses,
+            adaptation_work: 0.0,
         })
     }
 
@@ -511,9 +518,9 @@ impl<T: Context + 'static> MarkovChain<T> {
             .energy(&self.context, &crate::Change::Everything)
     }
 
-    /// Absolute energy drift: |initial + sum(accepted ΔE) - current|.
+    /// Absolute energy drift: |initial + sum(accepted ΔE) + adaptation work - current|.
     pub fn energy_drift(&self, initial_energy: f64) -> f64 {
-        let sum_du = self.propagate.energy_change_sum();
+        let sum_du = self.propagate.energy_change_sum() + self.adaptation_work;
         (initial_energy + sum_du - self.system_energy()).abs()
     }
 

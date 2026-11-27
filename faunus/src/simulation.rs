@@ -185,6 +185,20 @@ impl Source<'_> {
     }
 }
 
+/// Energy-term files given relative to the run (Åkesson σ(z)) live beside the state file, so a
+/// restart finds its own and Gibbs boxes (`box{i}_`-prefixed) never share one.
+fn anchor_term_files(
+    context: &impl crate::context::WithHamiltonianMut,
+    state: Option<&Path>,
+    box_index: Option<usize>,
+) -> Result<()> {
+    let dir = state
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."));
+    context.hamiltonian_mut().anchor_files(dir, box_index)?;
+    Ok(())
+}
+
 /// Build a Markov chain from an input, context and thermal energy,
 /// optionally restoring from a state checkpoint.
 fn build_markov_chain<T: Context + 'static>(
@@ -290,6 +304,7 @@ impl Simulation {
             Some(config) => build_gibbs(source, structure, state, rt, config, &medium)?,
             None => {
                 let context = source.backend(structure, &mut source.setup_rng()?)?;
+                anchor_term_files(&context, state, None)?;
                 let mc = build_markov_chain(source, context, rt, state, Some(&medium), None)?;
                 Engine::SingleBox(mc)
             }
@@ -324,12 +339,14 @@ impl Simulation {
     pub fn save_state(&self, path: &Path) -> Result<()> {
         match &self.engine {
             Engine::SingleBox(mc) => {
+                mc.context().hamiltonian().flush_files()?;
                 mc.save_state().to_file(path)?;
                 log::info!("Saved simulation state to {}", path.display());
             }
             Engine::Gibbs(ensemble) => {
                 for (i, mc) in ensemble.boxes().iter().enumerate() {
                     let box_state = box_prefixed_path(path, i);
+                    mc.context().hamiltonian().flush_files()?;
                     mc.save_state().to_file(&box_state)?;
                     log::info!("Saved box {i} state to {}", box_state.display());
                 }
@@ -354,6 +371,8 @@ fn build_gibbs(
     let mut setup_rng = source.setup_rng()?;
     let context0 = source.backend(structure, &mut setup_rng)?;
     let context1 = context0.clone();
+    anchor_term_files(&context0, state, Some(0))?;
+    anchor_term_files(&context1, state, Some(1))?;
 
     let inter_moves: Vec<_> = gibbs_cfg
         .moves
@@ -850,6 +869,8 @@ impl Replay {
         let source = Source::File(input);
         let medium = source.medium()?;
         let context = source.backend(None, &mut source.setup_rng()?)?;
+        // No state file here: a relative profile is read from the working directory.
+        anchor_term_files(&context, None, None)?;
         let mut analyses = source.analyses(&context, Some(&medium), None)?;
 
         // Before the atom-count check in `run`, which would otherwise be the user's only clue.

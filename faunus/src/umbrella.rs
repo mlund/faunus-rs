@@ -604,6 +604,9 @@ impl Umbrella {
             &mut crate::propagate::setup_rng_from_file(input)?,
         )?;
 
+        crate::WithHamiltonian::hamiltonian(&base_context)
+            .ensure_fixed_landscape("Umbrella sampling")?;
+
         // Load common state file to seed all windows that don't yet have a per-window state
         if let Some(state_path) = common_state {
             let state = State::from_file(state_path)?;
@@ -649,6 +652,9 @@ impl Umbrella {
 
         let half_width = config.windows.half_width();
         let n_windows = centers.len();
+
+        // A relative σ(z) profile (Fixed only here) is shared by every worker, from the state dir.
+        crate::WithHamiltonianMut::hamiltonian_mut(&base_context).anchor_files(state_dir, None)?;
 
         std::fs::create_dir_all(state_dir).map_err(|e| {
             anyhow::anyhow!(

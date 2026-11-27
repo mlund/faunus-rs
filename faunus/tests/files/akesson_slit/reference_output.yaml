@@ -1,0 +1,144 @@
+version:
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-42-gedeb35c-dirty
+medium:
+  permittivity: !Fixed 78.4
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: wall
+  N: 20
+  active: null
+  insert: !Manual
+  - - -20.0
+    - -15.0
+    - -49.0
+  - - -10.0
+    - -15.0
+    - -49.0
+  - - 0.0
+    - -15.0
+    - -49.0
+  - - 10.0
+    - -15.0
+    - -49.0
+  - - 20.0
+    - -15.0
+    - -49.0
+  - - -20.0
+    - -5.0
+    - -49.0
+  - - -10.0
+    - -5.0
+    - -49.0
+  - - 0.0
+    - -5.0
+    - -49.0
+  - - 10.0
+    - -5.0
+    - -49.0
+  - - 20.0
+    - -5.0
+    - -49.0
+  - - -20.0
+    - 5.0
+    - -49.0
+  - - -10.0
+    - 5.0
+    - -49.0
+  - - 0.0
+    - 5.0
+    - -49.0
+  - - 10.0
+    - 5.0
+    - -49.0
+  - - 20.0
+    - 5.0
+    - -49.0
+  - - -20.0
+    - 15.0
+    - -49.0
+  - - -10.0
+    - 15.0
+    - -49.0
+  - - 0.0
+    - 15.0
+    - -49.0
+  - - 10.0
+    - 15.0
+    - -49.0
+  - - 20.0
+    - 15.0
+    - -49.0
+- molecule: na
+  N: 40
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: cl
+  N: 20
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Slit
+- 50.0
+- 50.0
+- 100.0
+energy_change:
+  drift: 8.526512829121202e-14
+  final: -46.415713205158085
+  initial: -59.909662929538605
+energy_timers:
+- cell_overlap:
+    total: 4.18
+    energy: 2.82
+    update: 1.36
+- nonbonded:
+    total: 91.64
+    energy: 6.12
+    update: 85.52
+- akesson:
+    total: 4.18
+    energy: 2.85
+    update: 1.33
+propagate:
+  steps: 200
+  seed: !Fixed 42
+  collections:
+  - !Stochastic
+    cycles: 60
+    elapsed_seconds: 0.023033992
+    moves:
+    - !TranslateMolecule
+      molecule: na
+      max_displacement: 4.0
+      directions: xyz
+      weight: 2.0
+      repeat: 1
+      statistics:
+        num_trials: 7991
+        num_accepted: 6518
+        mean_square_displacement:
+          mean: 3.8768004968543748
+          samples: 7991
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: -0.3522841570547044
+        acceptance_ratio: 0.8156676260793393
+    - !TranslateMolecule
+      molecule: cl
+      max_displacement: 4.0
+      directions: xyz
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 4009
+        num_accepted: 3606
+        mean_square_displacement:
+          mean: 4.594751850380359
+          samples: 4009
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: -25.721465819639363
+        acceptance_ratio: 0.8994761785981542
+  criterion: MetropolisHastings
