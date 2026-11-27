@@ -1036,8 +1036,13 @@ impl SpeciationMove {
                 *count += more_count;
                 rels.extend(more);
             }
+            // Chained swaps can retype one atom twice (H2A → HA → A); it changed once.
             (GroupChange::UpdateIdentity(rels), GroupChange::UpdateIdentity(more)) => {
-                rels.extend(more)
+                for rel in more {
+                    if !rels.contains(&rel) {
+                        rels.push(rel);
+                    }
+                }
             }
             _ => return None,
         }
@@ -2865,6 +2870,95 @@ propagate:
              for an interacting molecular swap",
             drift / scale
         );
+    }
+
+    /// Run `yaml` with every `!Coulomb` turned into `!Fanourgakis`, returning the energy drift
+    /// relative to the initial energy and the change in the self term over the run.
+    fn fanourgakis_drift(yaml: &str) -> (f64, f64) {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+        use rand::SeedableRng;
+
+        let self_term =
+            |context: &Backend| crate::energy::self_term_energy(context, &Change::Everything);
+        assert!(yaml.contains("!Coulomb {"));
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.replace("!Coulomb {", "!Fanourgakis {")).unwrap();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(tmp.path(), &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+        let (initial_energy, initial_self) = (mc.system_energy(), self_term(mc.context()));
+        for step in mc.iter() {
+            step.unwrap();
+        }
+        let relative_drift = mc.energy_drift(initial_energy) / initial_energy.abs().max(1.0);
+        (relative_drift, self_term(mc.context()) - initial_self)
+    }
+
+    // Invariant 4: chained swaps `H2A → HA`, `HA → A` can retype one atom twice (the second
+    // sees it as HA); its self energy must change once. Starting from no `A`, the conserved
+    // n(H2A) + n(A) cannot return to the start by chance.
+    #[test]
+    fn chained_swaps_retyping_one_atom_twice_change_its_self_energy_once() {
+        let yaml = r#"atoms:
+  - {name: H2A, mass: 1.0, charge: 0.0, sigma: 3.0}
+  - {name: HA, mass: 1.0, charge: -1.0, sigma: 3.0}
+  - {name: A, mass: 1.0, charge: -2.0, sigma: 3.0}
+molecules:
+  - name: site
+    atoms: [H2A, H2A, HA]
+    has_com: false
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium: {permittivity: !Fixed 78.0, temperature: 298.15}
+  energy:
+    - !Nonbonded
+        default:
+          - !Coulomb {cutoff: 18.0}
+  blocks:
+    - {molecule: site, N: 5, active: 5, insert: !RandomAtomPos {}}
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  steps: 2000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          reactions:
+            - ["⚛H2A + ⚛HA = ⚛HA + ⚛A", !K 1.0]
+"#;
+        let (drift, self_change) = fanourgakis_drift(yaml);
+        assert!(self_change != 0.0, "self term never changed");
+        assert!(drift.abs() < 1e-9, "relative energy drift {drift:.3e}");
+    }
+
+    // Invariant 4: insertion, deletion, atom and molecule swaps change the energy by the self
+    // terms they add and remove. A changed self term proves each run exercised it.
+    #[test]
+    fn truncated_coulomb_self_energy_tracks_speciation_without_drift() {
+        let cases = [
+            ("molecular 2 Na = Ca", charge_swap_yaml(false)),
+            ("atomic 2 Na = Ca", charge_swap_yaml(true)),
+            ("paired atom swap", double_swap_yaml(2_000)),
+            (
+                "molecule swap",
+                phytate_yaml(7.0, 12, 2_000, INTERACTING_ENERGY),
+            ),
+        ];
+        for (name, yaml) in cases {
+            let (drift, self_change) = fanourgakis_drift(&yaml);
+            assert!(self_change != 0.0, "{name}: self term never changed");
+            assert!(drift < 1e-9, "{name}: relative energy drift {drift:.3e}");
+        }
     }
 
     /// A one-atom molecular group has no orientation, and deriving one must not invent it.

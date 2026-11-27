@@ -21,6 +21,7 @@ pub(crate) mod builder;
 mod celloverlap;
 mod constrain;
 mod contact_tessellation;
+mod coulomb_self;
 mod custom_external;
 mod custom_pair;
 mod energyterm;
@@ -50,6 +51,8 @@ pub use akesson::{Akesson, AkessonBuilder, AkessonUpdate};
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
 pub use constrain::{Constrain, ConstrainBuilder, Restraint};
+#[cfg(test)]
+pub(crate) use coulomb_self::self_term_energy;
 pub use custom_external::{CustomExternal, CustomExternalBuilder};
 pub use energyterm::EnergyTerm;
 #[cfg(feature = "gpu")]

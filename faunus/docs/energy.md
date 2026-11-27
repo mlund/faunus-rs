@@ -307,6 +307,36 @@ system:
           - !Fanourgakis {cutoff: 50.0, debye_length: 12.0}
 ```
 
+#### Self energy
+
+A truncated scheme gives every charge an interaction with its own neutralising
+cloud,
+
+$$u_\text{self} = c_1 \frac{z^2 \lambda_B}{r_c} RT,$$
+
+where $\lambda_B$ is the Bjerrum length and $c_1$ depends on the scheme.
+For `!Fanourgakis`, $c_1 = -7/8$
+([Fanourgakis et al., 2009](https://doi.org/10.1063/1.3216520)). The pairwise
+`!Ewald` and a shifted `!ReactionField` also carry a self term; plain
+`!Coulomb` has none. At fixed charges $u_\text{self}$ is a constant, but it
+enters every move that changes $\sum z^2$: grand-canonical insertion and
+deletion, titration, and molecule swaps. Omitting it at $r_c = 80$ Å biases the
+insertion of a 1:1 ion pair by about $0.16\,RT$ in water.
+
+Faunus adds the term automatically and reports it as `coulomb_self`. Each atom
+kind takes $c_1$ and $r_c$ from the scheme of its own pair, so a `replace`
+entry for `[Na, Na]` sets the self energy of Na. With salt screening, the term
+refers to the screened potential and becomes small; the Debye–Hückel self
+energy of the implicit salt is not included. The spline and nonbonded `cutoff`
+must reach the scheme's `cutoff`: a shorter range truncates the pair a second
+time, so Faunus stops with an error. Reciprocal-space `!Ewald` (below)
+supplies its own self energy, so its real-space part adds none here.
+
+**Splined potentials are shifted to zero at the cutoff by default
+(`shift_energy`). This turns `!Coulomb` into a truncated scheme, but its self
+energy stays zero. Use `!Fanourgakis` for grand-canonical and titration
+simulations.**
+
 ---
 
 ## Ewald Summation

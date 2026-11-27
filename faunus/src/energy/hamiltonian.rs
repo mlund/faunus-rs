@@ -49,10 +49,29 @@ impl Hamiltonian {
 
         hamiltonian.push(CellOverlap.into());
 
+        // Built from the user's schemes, before the real-space Ewald injection below:
+        // reciprocal Ewald adds its own self term.
+        if let Some(term) = super::coulomb_self::CoulombSelfEnergy::new(
+            builder.nonbonded(),
+            topology.atomkinds(),
+            medium.as_ref(),
+        )? {
+            hamiltonian.push(term.into());
+        }
+
         // If Ewald is configured, inject real-space pair potential into nonbonded
         // defaults *before* building (and potentially splining) the pair matrix.
         let mut pairpot_builder;
         let pairpot_ref = if let Some(ewald) = builder.ewald() {
+            if builder
+                .nonbonded()
+                .is_some_and(super::builder::PairPotentialBuilder::has_ewald_pair)
+            {
+                anyhow::bail!(
+                    "reciprocal `!Ewald` adds the real-space pair potential itself; remove the \
+                     pairwise `!Ewald` or `!CoulombEwald` from `!Nonbonded`"
+                );
+            }
             let debye_length = medium.as_ref().and_then(|m| m.debye_length());
             let real_space = ewald.splitting(debye_length)?.real_space_scheme();
             log::info!(

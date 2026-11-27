@@ -17,7 +17,7 @@
 
 use super::slab_potential::{square_base_width, SlabGrid, SlabKernel};
 use crate::cell::{Cell, Shape};
-use crate::change::{Change, GroupChange};
+use crate::change::{Change, Dependence};
 use crate::context::ObserveContext;
 use anyhow::{Context, Result};
 use interatomic::coulomb::{Medium, Temperature};
@@ -205,37 +205,10 @@ impl Akesson {
 
     /// Energy (kJ/mol) of the charges `change` touches.
     pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
-        let atom = |i: usize| context.atom_charge(i) * self.potential(context.position(i).z);
-        let group_energy = |group_index: usize| -> f64 {
-            context.groups()[group_index].iter_active().map(atom).sum()
-        };
-        let changed = |group_index: usize, group_change: &GroupChange| -> f64 {
-            match group_change {
-                GroupChange::None => 0.0,
-                // φ is fixed between refreshes, so only the changed slots contribute to ΔU.
-                GroupChange::PartialUpdate(rels) | GroupChange::UpdateIdentity(rels) => {
-                    let start = context.groups()[group_index].start();
-                    rels.iter().map(|rel| atom(start + rel.get())).sum()
-                }
-                // Summing what is active in each state keeps ΔU right across a size change.
-                GroupChange::RigidBody
-                | GroupChange::Resize(_)
-                | GroupChange::ResizeExcludeIntra(_)
-                | GroupChange::ResizePartial(..)
-                | GroupChange::AtomicShrink { .. } => group_energy(group_index),
-            }
-        };
-        let reduced: f64 = match change {
-            Change::None => 0.0,
-            Change::Everything | Change::Volume(..) => {
-                (0..context.groups().len()).map(group_energy).sum()
-            }
-            Change::SingleGroup(group_index, group_change) => changed(*group_index, group_change),
-            Change::Groups(changes) => changes
-                .iter()
-                .map(|(group_index, group_change)| changed(*group_index, group_change))
-                .sum(),
-        };
+        // φ is fixed between refreshes, so only the touched particles contribute to ΔU.
+        let reduced = change.sum_over_touched(context, Dependence::Positions, |i| {
+            context.atom_charge(i) * self.potential(context.position(i).z)
+        });
         self.thermal_energy * reduced
     }
 
@@ -380,6 +353,7 @@ mod tests {
     use super::*;
     use crate::backend::{get_medium_str, Backend};
     use crate::cell::{Cuboid, Cylinder, Slit};
+    use crate::change::GroupChange;
     use crate::energy::slab_potential::brute_force_exterior;
 
     // Two unit ions, each its own group, at bin centres of a 20×20×40 slit (1 Å bins:

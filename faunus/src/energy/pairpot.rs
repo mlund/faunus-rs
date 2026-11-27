@@ -135,6 +135,27 @@ impl Cutoff for Coulomb {
     }
 }
 
+impl Coulomb {
+    /// Self energy (kJ/mol) of a charge `z` under this scheme.
+    ///
+    /// # Errors
+    /// A composite potential's self term is unknown. Per-scheme conversion never yields one,
+    /// but should a path ever do so, the term must fail loudly rather than go missing.
+    pub(crate) fn self_energy(&self, z: f64) -> anyhow::Result<f64> {
+        Ok(match self {
+            Self::None => 0.0,
+            Self::Plain(p) => p.self_energy(z),
+            Self::ReactionField(p) => p.self_energy(z),
+            Self::Ewald(p) => p.self_energy(z),
+            Self::RealSpaceEwald(p) => p.self_energy(z),
+            Self::Fanourgakis(p) => p.self_energy(z),
+            Self::Dynamic(_) => {
+                anyhow::bail!("self energy of a composite Coulomb potential is unknown")
+            }
+        })
+    }
+}
+
 impl Cutoff for PairPot {
     /// Interaction range: the longer of the two components, so culling at it is exact.
     fn cutoff(&self) -> f64 {

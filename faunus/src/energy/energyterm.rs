@@ -3,6 +3,7 @@ use super::{
     bonded::{self, IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
     contact_tessellation::ContactTessellationEnergy,
+    coulomb_self::CoulombSelfEnergy,
     custom_external::CustomExternal,
     custom_pair::CustomPair,
     ewald::EwaldReciprocalEnergy,
@@ -55,6 +56,8 @@ pub enum EnergyTerm {
     CustomExternal(CustomExternal),
     /// Mean field of the charge outside a slit's minimum-image box.
     Akesson(Akesson),
+    /// Self energy of each charge under a truncated pair Coulomb scheme.
+    CoulombSelf(CoulombSelfEnergy),
     /// User-defined energy/force between two rigid-body centers of mass.
     CustomPair(CustomPair),
     /// Ewald reciprocal-space electrostatic energy.
@@ -90,6 +93,7 @@ macro_rules! dispatch_stateful {
             | EnergyTerm::ExternalPressure(_)
             | EnergyTerm::CustomExternal(_)
             | EnergyTerm::Akesson(_)
+            | EnergyTerm::CoulombSelf(_)
             | EnergyTerm::CustomPair(_)
             | EnergyTerm::ExcludedCoulomb(_)
             | EnergyTerm::Penalty(_) => {}
@@ -113,6 +117,7 @@ macro_rules! dispatch_all {
             EnergyTerm::ExternalPressure(x) => x.$method($($arg),*),
             EnergyTerm::CustomExternal(x) => x.$method($($arg),*),
             EnergyTerm::Akesson(x) => x.$method($($arg),*),
+            EnergyTerm::CoulombSelf(x) => x.$method($($arg),*),
             EnergyTerm::CustomPair(x) => x.$method($($arg),*),
             EnergyTerm::EwaldReciprocal(x) => x.$method($($arg),*),
             EnergyTerm::PolymerDepletion(x) => x.$method($($arg),*),
@@ -154,6 +159,7 @@ impl_energyterm_from! {
     ExternalPressure(ExternalPressure),
     CustomExternal(CustomExternal),
     Akesson(Akesson),
+    CoulombSelf(CoulombSelfEnergy),
     CustomPair(CustomPair),
     PolymerDepletion(PolymerDepletion),
     ExcludedCoulomb(ExcludedCoulomb),
@@ -184,6 +190,7 @@ impl EnergyTerm {
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
             | Self::Akesson(_)
+            | Self::CoulombSelf(_)
             | Self::CustomPair(_)
             | Self::ExcludedCoulomb(_)
             | Self::Penalty(_) => Ok(()),
@@ -253,6 +260,7 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExcludedCoulomb(_)
             | Self::Akesson(_)
+            | Self::CoulombSelf(_)
             | Self::Penalty(_) => None,
             Self::Tabulated(x) => Some(x.to_yaml()),
         }
@@ -277,6 +285,7 @@ impl EnergyTerm {
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
             | Self::Akesson(_)
+            | Self::CoulombSelf(_)
             | Self::PolymerDepletion(_)
             | Self::ExcludedCoulomb(_)
             | Self::Tabulated(_)
@@ -330,6 +339,8 @@ impl EnergyTerm {
             }
             // LD runs at fixed volume in a periodic cube, so neither can change
             Self::ExternalPressure(_) | Self::CellOverlap(_) => LdForces::Constant,
+            // LD changes neither charges nor particle counts
+            Self::CoulombSelf(_) => LdForces::Constant,
             // Excluded pairs only move apart in flexible molecules
             Self::ExcludedCoulomb(_) => {
                 if flexible().any(|m| m.keep_excluded_coulomb() && !m.exclusions().is_empty()) {
@@ -380,6 +391,7 @@ impl crate::Info for EnergyTerm {
             Self::ExternalPressure(_) => "external_pressure",
             Self::CustomExternal(_) => "custom_external",
             Self::Akesson(_) => "akesson",
+            Self::CoulombSelf(_) => "coulomb_self",
             Self::CustomPair(_) => "custom_pair",
             Self::EwaldReciprocal(_) => "ewald_reciprocal",
             Self::PolymerDepletion(_) => "polymer_depletion",
