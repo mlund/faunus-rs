@@ -449,6 +449,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#slit-electrostatics-charge-outside-the-box" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slit electrostatics: charge outside the box
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#bonded-interactions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -792,6 +803,17 @@
     <span class="md-ellipsis">
       
         Excluded-Pair Coulomb Correction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#slit-electrostatics-charge-outside-the-box" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slit electrostatics: charge outside the box
       
     </span>
   </a>
@@ -1648,6 +1670,91 @@ charge-dependent Coulomb part that varies under alchemical moves.</p>
 </code></pre></div>
 <p>No additional <code>energy:</code> section is needed — the term is created automatically.</p>
 <hr />
+<h2 id="slit-electrostatics-charge-outside-the-box">Slit electrostatics: charge outside the box<a class="headerlink" href="#slit-electrostatics-charge-outside-the-box" title="Permanent link">&para;</a></h2>
+<p>A <code>!Slit</code> is periodic in <span class="arithmatex">\(x\)</span> and <span class="arithmatex">\(y\)</span>, so the pair Coulomb sum sees only the charges inside
+each particle's minimum-image square. A charged surface, however, is laterally infinite.
+Without the charge beyond the square, a wall is under-screened from afar and counterions
+spread into the bulk instead of forming a double layer. <code>!Akesson</code> adds this missing
+charge as a mean field
+(<a href="https://doi.org/10.1063/1.440065">Torrie &amp; Valleau, 1980</a>;
+<a href="https://doi.org/10.1080/00268979600100271">Greberg, Kjellander &amp; Åkesson, 1996</a>).</p>
+<p>The term averages all charges laterally into slabs of width <span class="arithmatex">\(\Delta z\)</span>, giving the running
+mean areal charge density <span class="arithmatex">\(\sigma(z_j)\)</span> of slab <span class="arithmatex">\(j\)</span>. Each charge <span class="arithmatex">\(q_i\)</span> at height <span class="arithmatex">\(z_i\)</span> then
+feels the potential of the charge outside the box,</p>
+<div class="arithmatex">\[U = k_BT \sum_i q_i\,\varphi_\text{ext}(z_i), \qquad
+\varphi_\text{ext}(z) = \sum_j \sigma(z_j)\, g(|z - z_j|),\]</div>
+<p>where <span class="arithmatex">\(g\)</span> is the potential of an infinite sheet of unit areal charge minus that of the
+central square of half-width <span class="arithmatex">\(a = L_x/2\)</span> (Greberg et al., Eq. 15):</p>
+<div class="arithmatex">\[g(z) = l_B\left[-2\pi z
+  - 8a \ln\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
+  + 2z\left(\frac{\pi}{2} + \arcsin\frac{a^4-z^4-2a^2z^2}{(a^2+z^2)^2}\right)\right].\]</div>
+<p>Here <span class="arithmatex">\(l_B\)</span> is the Bjerrum length; <span class="arithmatex">\(\varphi_\text{ext}\)</span> is linear between slab centres. The
+exterior charge enters only through its lateral average, so ion–ion correlations reach no
+farther than the box: the lateral box must be large compared with the correlation length.</p>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
+<p>These are checked at start-up:</p>
+<ul>
+<li>a <code>!Slit</code> cell with a square base, <span class="arithmatex">\(L_x = L_y\)</span>;</li>
+<li>plain <code>!Coulomb</code> for every pair of charged atom kinds, with a cutoff (and any spline or
+  group cutoff) of at least the minimum-image span <span class="arithmatex">\(\sqrt{L_x^2/4 + L_y^2/4 + L_z^2}\)</span>;</li>
+<li>no Debye screening, from either <code>medium.salt</code> or a pair <code>debye_length</code>;</li>
+<li>constant volume: a committed volume move stops the run;</li>
+<li>no <a href="../analysis/#electric-potential-profile">Electric Potential Profile</a> with
+  <code>finite_box_correction: true</code>, which would remove the exterior charge again.</li>
+</ul>
+<h3 id="equilibrate-then-produce">Equilibrate, then produce<a class="headerlink" href="#equilibrate-then-produce" title="Permanent link">&para;</a></h3>
+<p>With <code>update: !Every N</code>, the term samples <span class="arithmatex">\(\sigma(z)\)</span> every MC step, recomputes
+<span class="arithmatex">\(\varphi_\text{ext}\)</span> every <span class="arithmatex">\(N\)</span> steps, and rewrites <code>file</code>; saving the state also writes it, so
+a restart keeps every sample. Each refresh changes the energy
+outside any move; the energy-drift check accounts for this. Run until <span class="arithmatex">\(\sigma(z)\)</span> stops
+changing, then switch to <code>update: Fixed</code> for production: the profile is loaded once and never
+changed. <code>Fixed</code> without a sampled profile is an error. Wang–Landau and umbrella sampling
+assume a fixed energy landscape and accept only <code>Fixed</code>.</p>
+<p><code>file</code> is a CSV with columns <code>z/Å</code>, <code>σ/e·Å⁻²</code> and <code>samples</code>. A relative path is resolved
+next to the state file (<code>-s</code>), so a restart continues the same profile; in a Gibbs ensemble
+each box keeps its own, prefixed <code>box0_</code> and <code>box1_</code>. Umbrella and Wang–Landau read it from
+the state directory, and <code>rerun</code> from the working directory. A profile from a different
+<code>resolution</code> or box height is rejected.</p>
+<h3 id="yaml-configuration_4">YAML configuration<a class="headerlink" href="#yaml-configuration_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cell</span><span class="p">:</span><span class="w"> </span><span class="kt">!Slit</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">50.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">100.0</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">500.0</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># ≥ minimum-image span</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WCA</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Akesson</span>
+<span class="w">      </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">      </span><span class="c1"># slab width Δz (Å)</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">akesson.csv</span><span class="w">    </span><span class="c1"># σ(z), next to the state file</span>
+<span class="w">      </span><span class="nt">update</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">   </span><span class="c1"># equilibration; use `Fixed` for production</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resolution</code></td>
+<td>yes</td>
+<td>Slab width <span class="arithmatex">\(\Delta z\)</span> (Å)</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td><span class="arithmatex">\(\sigma(z)\)</span> profile: loaded if present; rewritten on each refresh and state save with <code>!Every</code></td>
+</tr>
+<tr>
+<td><code>update</code></td>
+<td>yes</td>
+<td><code>!Every N</code>: sample every step, refresh every <span class="arithmatex">\(N\)</span> steps. <code>Fixed</code>: load only</td>
+</tr>
+</tbody>
+</table>
+<hr />
 <h2 id="bonded-interactions">Bonded Interactions<a class="headerlink" href="#bonded-interactions" title="Permanent link">&para;</a></h2>
 <p>Bonded energy terms are automatically added to the Hamiltonian based on the
 bonds, torsions, and dihedrals defined in the <a href="../topology/#molecules">topology</a>.
@@ -1795,7 +1902,7 @@ parser for better performance:</p>
 </tr>
 </tbody>
 </table>
-<h3 id="yaml-configuration_4">YAML configuration<a class="headerlink" href="#yaml-configuration_4" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_5">YAML configuration<a class="headerlink" href="#yaml-configuration_5" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="c1"># Expression with named constants</span>
@@ -1896,7 +2003,7 @@ custom <code>U(r)</code> between two rigid molecules.</p>
 </table>
 <p>The same expression syntax as <a href="#custom-external-potential"><code>custom_external</code></a>
 applies (operators, math functions, Python-style conditionals, named constants).</p>
-<h3 id="yaml-configuration_5">YAML configuration<a class="headerlink" href="#yaml-configuration_5" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_6">YAML configuration<a class="headerlink" href="#yaml-configuration_6" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="c1"># Harmonic restraint at fixed COM-COM distance (umbrella window)</span>
@@ -1967,7 +2074,7 @@ free energy surface along the collective variable(s).</p>
 Use <a href="../analysis/#rerun"><code>faunus rerun</code></a> to replay the trajectory:
 when a penalty term is detected, rerun automatically reweights all analyses
 by <span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering the correct ensemble averages.</p>
-<h3 id="yaml-configuration_6">YAML configuration<a class="headerlink" href="#yaml-configuration_6" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_7">YAML configuration<a class="headerlink" href="#yaml-configuration_7" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Penalty</span>
@@ -2035,7 +2142,7 @@ The tessellation is updated incrementally: when a single group moves,
 only the moved atoms and their spatial neighbors are re-tessellated.
 This works for both rigid-body and flexible (polymer) moves.
 Periodic boundary conditions are supported for orthorhombic cells.</p>
-<h3 id="yaml-configuration_7">YAML configuration<a class="headerlink" href="#yaml-configuration_7" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_8">YAML configuration<a class="headerlink" href="#yaml-configuration_8" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">0.9</span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">B</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">4.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">}</span>
@@ -2105,7 +2212,7 @@ are supported for orthorhombic (cuboid) cells.</p>
 each molecule move as a unit. Support for flexible molecules and polymers may be
 added in future versions.</p>
 </div>
-<h3 id="yaml-configuration_8">YAML configuration<a class="headerlink" href="#yaml-configuration_8" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_9">YAML configuration<a class="headerlink" href="#yaml-configuration_9" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">ALA</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">-0.5</span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">ARG</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">6.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w">  </span><span class="nv">0.3</span><span class="p p-Indicator">}</span>
@@ -2186,7 +2293,7 @@ hard (infinite outside) or soft (quadratic):</p>
 <p><code>!HarmonicWall</code> confines the CV to an interval while pushing back smoothly rather
 than with an abrupt wall — the usual choice for keeping a coordinate in a window
 without the sampling artefacts of a hard boundary.</p>
-<h3 id="yaml-configuration_9">YAML configuration<a class="headerlink" href="#yaml-configuration_9" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_10">YAML configuration<a class="headerlink" href="#yaml-configuration_10" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Constrain</span>
@@ -2367,7 +2474,7 @@ Analytical forces are not yet implemented for this mode.</p>
 <li><span class="arithmatex">\(\kappa = 1\)</span> gives equilibrium (living) polymers; <span class="arithmatex">\(\kappa \gtrsim 5\)</span> approaches
   monodisperse limit</li>
 </ul>
-<h3 id="yaml-configuration_10">YAML configuration<a class="headerlink" href="#yaml-configuration_10" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_11">YAML configuration<a class="headerlink" href="#yaml-configuration_11" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PolymerDepletion</span>
@@ -2507,7 +2614,7 @@ A pairwise group energy cache gives O(1) lookups for single rigid-body MC moves.
   uses the temperature from table generation. A warning is emitted if the
   simulation temperature is significantly lower than the generation temperature.</li>
 </ul>
-<h3 id="yaml-configuration_11">YAML configuration<a class="headerlink" href="#yaml-configuration_11" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_12">YAML configuration<a class="headerlink" href="#yaml-configuration_12" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Tabulated6d</span>
@@ -2593,7 +2700,7 @@ The same pairwise group energy cache gives O(1) lookups for rigid-body MC moves.
 <p>Only the adaptive format is supported, using per-slab angular resolution
 that adjusts with separation (same scheme as 6D adaptive tables).
 No swap averaging is performed since the interaction is inherently asymmetric.</p>
-<h3 id="yaml-configuration_12">YAML configuration<a class="headerlink" href="#yaml-configuration_12" title="Permanent link">&para;</a></h3>
+<h3 id="yaml-configuration_13">YAML configuration<a class="headerlink" href="#yaml-configuration_13" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Tabulated3d</span>

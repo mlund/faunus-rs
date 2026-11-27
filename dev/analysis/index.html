@@ -2266,8 +2266,8 @@ closed form</p>
 uniformly charged disk of radius <span class="arithmatex">\(R\)</span> — rather than a laterally-averaged cross-section, so for a
 cylinder the correction is exact on-axis and approximate off it. Both forms vanish as the
 cross-section grows (<span class="arithmatex">\(\varphi_\text{ext}\to0\)</span> for <span class="arithmatex">\(\kappa a\gg1\)</span>), so the correction matters
-only for thin boxes. Enable it only when the simulation itself does not
-already apply such an external correction, otherwise the far field is subtracted twice.</p>
+only for thin boxes. With <a href="../energy/#slit-electrostatics-charge-outside-the-box"><code>!Akesson</code></a>
+the simulation already includes the charge outside the box, so the two cannot be combined.</p>
 <p>For the unscreened (bare-Coulomb) kernel the correction reduces to Greberg's original
 square-base form,</p>
 <div class="arithmatex">\[\varphi_\text{ext}(z) = -2\pi\,l_B\,|z| - l_B\,u_\text{box}(z),
