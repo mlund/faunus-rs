@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.3
-  git_revision: v3.0.0-beta.3-9-gbe5e4d4-dirty
+  git_revision: v3.0.0-beta.3-44-g83cba81-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -34,21 +34,25 @@ cell: !Cuboid
 - 18.0
 - 18.0
 energy_change:
-  drift: 5.4569682106375694e-12
-  final: -3420.3135850962476
-  initial: -3417.1590020964845
+  drift: 0.0
+  final: -19217.12676398083
+  initial: -19213.97218098106
 energy_timers:
 - cell_overlap:
-    total: 1.03
-    energy: 0.69
-    update: 0.35
-- nonbonded:
-    total: 97.93
-    energy: 14.45
-    update: 83.48
-- intramolecular:
     total: 1.04
     energy: 0.7
+    update: 0.34
+- coulomb_self:
+    total: 1.08
+    energy: 0.73
+    update: 0.34
+- nonbonded:
+    total: 96.83
+    energy: 15.22
+    update: 81.61
+- intramolecular:
+    total: 1.05
+    energy: 0.72
     update: 0.34
 propagate:
   steps: 8000
@@ -56,7 +60,7 @@ propagate:
   collections:
   - !Stochastic
     cycles: 1
-    elapsed_seconds: 0.924610466
+    elapsed_seconds: 0.742310421
     moves:
     - !TranslateMolecule
       molecule: water

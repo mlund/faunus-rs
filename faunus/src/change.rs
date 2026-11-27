@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::RelIndex;
+use crate::group::{GroupCollection, RelIndex};
 use serde::{Deserialize, Serialize};
 
 use crate::{cell, group::GroupSize, montecarlo::NewOld};
@@ -51,7 +51,8 @@ pub enum GroupChange {
     /// Resize group, excluding intramolecular energy (used for molecular swaps where
     /// intramolecular contributions are absorbed into the equilibrium constant)
     ResizeExcludeIntra(GroupSize),
-    /// The identity of a set of particles has changed
+    /// The identity of a set of particles has changed. Distinct slots: per-particle terms
+    /// sum over them, so a repeated slot would count its change twice.
     UpdateIdentity(Vec<RelIndex>),
     /// Resize an atomic group and report the affected relative indices.
     /// Used for GCMC on atomic mega-groups where only the inserted/deleted atoms changed.
@@ -117,6 +118,62 @@ impl GroupChange {
                 | Self::ResizePartial(_, _)
                 | Self::AtomicShrink { .. }
         )
+    }
+}
+
+/// What a per-particle energy term depends on, which decides the particles a change touches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Dependence {
+    /// Position and identity, e.g. an external field.
+    Positions,
+    /// Identity and activity only: moving a particle can never change the energy.
+    IdentityOnly,
+}
+
+impl Change {
+    /// Sum `f` over the active particles whose contribution `self` may change, for a term
+    /// that is a plain sum over particles. Evaluated before and after a move, the difference
+    /// is the term's ΔU.
+    ///
+    /// Size changes sum every active particle of the group in each state, since the slots
+    /// that disappear or appear are only known on one side.
+    pub(crate) fn sum_over_touched(
+        &self,
+        context: &impl GroupCollection,
+        depends: Dependence,
+        f: impl Fn(usize) -> f64,
+    ) -> f64 {
+        let groups = context.groups();
+        let whole_group =
+            |group_index: usize| -> f64 { groups[group_index].iter_active().map(&f).sum() };
+        let slots = |group_index: usize, rels: &[RelIndex]| -> f64 {
+            let start = groups[group_index].start();
+            rels.iter().map(|rel| f(start + rel.get())).sum()
+        };
+        let positions = depends == Dependence::Positions;
+        let changed = |group_index: usize, group_change: &GroupChange| -> f64 {
+            match group_change {
+                GroupChange::None => 0.0,
+                GroupChange::UpdateIdentity(rels) => slots(group_index, rels),
+                GroupChange::PartialUpdate(rels) if positions => slots(group_index, rels),
+                GroupChange::RigidBody if positions => whole_group(group_index),
+                GroupChange::PartialUpdate(_) | GroupChange::RigidBody => 0.0,
+                GroupChange::Resize(_)
+                | GroupChange::ResizeExcludeIntra(_)
+                | GroupChange::ResizePartial(..)
+                | GroupChange::AtomicShrink { .. } => whole_group(group_index),
+            }
+        };
+        match self {
+            Self::None => 0.0,
+            Self::Volume(..) if !positions => 0.0,
+            Self::Everything | Self::Volume(..) => (0..groups.len()).map(whole_group).sum(),
+            Self::SingleGroup(group_index, group_change) => changed(*group_index, group_change),
+            Self::Groups(changes) => changes
+                .iter()
+                .map(|(group_index, group_change)| changed(*group_index, group_change))
+                .sum(),
+        }
     }
 }
 

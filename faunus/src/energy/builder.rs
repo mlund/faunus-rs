@@ -573,7 +573,7 @@ impl PairPotentialBuilder {
     /// - If the pair is in `append`, merges with `default` by interaction type
     ///   (same type in append replaces that type from default).
     /// - Otherwise returns `default`.
-    fn resolve_interactions(
+    pub(crate) fn resolve_interactions(
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
@@ -733,13 +733,7 @@ impl PairPotentialBuilder {
     ) -> anyhow::Result<Option<super::akesson::CoulombScheme>> {
         let charged: Vec<&AtomKind> = atomkinds.iter().filter(|a| a.charge() != 0.0).collect();
         let medium_kappa = medium.and_then(|m| m.debye_length()).map(f64::recip);
-        let range_limit = self
-            .spline
-            .as_ref()
-            .map(|s| s.cutoff)
-            .into_iter()
-            .chain(self.cutoff)
-            .fold(f64::INFINITY, f64::min);
+        let range_limit = self.pair_range();
         let mut shared: Option<super::akesson::CoulombScheme> = None;
         for (i, a) in charged.iter().enumerate() {
             for b in &charged[i..] {
@@ -763,13 +757,38 @@ impl PairPotentialBuilder {
         Ok(shared)
     }
 
-    /// True if any configured interaction is a Coulomb variant.
-    pub(crate) fn has_coulomb(&self) -> bool {
+    /// True if any configured interaction, in any section, satisfies `predicate`.
+    fn any_interaction(&self, predicate: impl Fn(&PairInteraction) -> bool) -> bool {
         self.default
             .iter()
             .chain(self.replace.values().flatten())
             .chain(self.append.values().flatten())
-            .any(|i| i.is_coulomb())
+            .any(predicate)
+    }
+
+    /// True if any configured interaction is a Coulomb variant.
+    pub(crate) fn has_coulomb(&self) -> bool {
+        self.any_interaction(PairInteraction::is_coulomb)
+    }
+
+    /// True if any configured interaction is an Ewald real-space pair scheme.
+    pub(crate) fn has_ewald_pair(&self) -> bool {
+        self.any_interaction(|i| {
+            matches!(
+                i,
+                PairInteraction::CoulombEwald(_) | PairInteraction::CoulombRealSpaceEwald(_)
+            )
+        })
+    }
+
+    /// The distance the pair sum reaches: spline and culling cutoffs both truncate it.
+    pub(crate) fn pair_range(&self) -> f64 {
+        self.spline
+            .as_ref()
+            .map(|s| s.cutoff)
+            .into_iter()
+            .chain(self.cutoff)
+            .fold(f64::INFINITY, f64::min)
     }
 
     /// Spline configuration for this nonbonded term, if any.
