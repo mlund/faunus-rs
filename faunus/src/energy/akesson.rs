@@ -297,6 +297,15 @@ impl Akesson {
         Ok(self.energy(context, &Change::Everything) - before)
     }
 
+    /// Write samples taken since the last refresh, so a checkpoint between refreshes keeps them.
+    /// φ is left alone: it changes only on refresh steps, where the work is booked.
+    pub(crate) fn flush(&self) -> Result<()> {
+        if self.is_adaptive() && self.samples > 0 {
+            self.save()?;
+        }
+        Ok(())
+    }
+
     /// Write via a sibling temp file, so an interrupted run never leaves a truncated profile.
     fn save(&self) -> Result<()> {
         use std::fmt::Write as _;
@@ -581,6 +590,21 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
     }
 
     #[test]
+    fn flush_keeps_samples_taken_since_the_last_refresh() {
+        // A run ending between refreshes must not drop its tail on restart.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("akesson.csv");
+        let context = context();
+        let every = AkessonUpdate::Every(NonZeroUsize::new(10).unwrap());
+        let mut term = term(&file, every, &context);
+        for step in 1..=13 {
+            term.advance(&context, step).unwrap();
+        }
+        term.flush().unwrap();
+        assert_eq!(load_profile(&file, &term.grid).unwrap().1, 13);
+    }
+
+    #[test]
     fn fixed_mode_reloads_the_saved_field_and_never_writes() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("akesson.csv");
@@ -598,6 +622,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
         assert_eq!(fixed.advance(&context, 1).unwrap(), 0.0);
         assert_eq!(fixed.energy(&context, &Change::Everything), energy);
         assert_eq!(std::fs::read_to_string(&file).unwrap(), saved);
+        std::fs::remove_file(&file).unwrap();
+        fixed.flush().unwrap();
+        assert!(!file.exists(), "a fixed profile was written");
     }
 
     fn plain(cutoff: f64) -> CoulombScheme {

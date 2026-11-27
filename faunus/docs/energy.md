@@ -563,7 +563,8 @@ These are checked at start-up:
 ### Equilibrate, then produce
 
 With `update: !Every N`, the term samples $\sigma(z)$ every MC step, recomputes
-$\varphi_\text{ext}$ every $N$ steps, and rewrites `file`. Each refresh changes the energy
+$\varphi_\text{ext}$ every $N$ steps, and rewrites `file`; saving the state also writes it, so
+a restart keeps every sample. Each refresh changes the energy
 outside any move; the energy-drift check accounts for this. Run until $\sigma(z)$ stops
 changing, then switch to `update: Fixed` for production: the profile is loaded once and never
 changed. `Fixed` without a sampled profile is an error. Wang–Landau and umbrella sampling
@@ -594,7 +595,7 @@ system:
 Key          | Required | Description
 ------------ | -------- | -----------
 `resolution` | yes      | Slab width $\Delta z$ (Å)
-`file`       | yes      | $\sigma(z)$ profile: loaded if present; rewritten on each refresh with `!Every`
+`file`       | yes      | $\sigma(z)$ profile: loaded if present; rewritten on each refresh and state save with `!Every`
 `update`     | yes      | `!Every N`: sample every step, refresh every $N$ steps. `Fixed`: load only
 
 ---

@@ -475,6 +475,11 @@ impl Hamiltonian {
             .map_or(Ok(()), |a| a.anchor(dir, box_index))
     }
 
+    /// Write what adaptive terms have sampled since their last refresh; call with a checkpoint.
+    pub(crate) fn flush_files(&self) -> anyhow::Result<()> {
+        self.akesson().map_or(Ok(()), super::Akesson::flush)
+    }
+
     /// The Åkesson mean-field term, if present (`!Akesson` is unique).
     pub(crate) fn akesson(&self) -> Option<&super::Akesson> {
         #[allow(clippy::wildcard_enum_match_arm)] // searching specifically for the Åkesson term

@@ -339,12 +339,14 @@ impl Simulation {
     pub fn save_state(&self, path: &Path) -> Result<()> {
         match &self.engine {
             Engine::SingleBox(mc) => {
+                mc.context().hamiltonian().flush_files()?;
                 mc.save_state().to_file(path)?;
                 log::info!("Saved simulation state to {}", path.display());
             }
             Engine::Gibbs(ensemble) => {
                 for (i, mc) in ensemble.boxes().iter().enumerate() {
                     let box_state = box_prefixed_path(path, i);
+                    mc.context().hamiltonian().flush_files()?;
                     mc.save_state().to_file(&box_state)?;
                     log::info!("Saved box {i} state to {}", box_state.display());
                 }
